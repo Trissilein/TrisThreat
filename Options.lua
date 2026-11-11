@@ -330,7 +330,73 @@ end
 
 SLASH_TRISTHREAT1 = "/tristhreat"
 SLASH_TRISTHREAT2 = "/tt"
+-- /tt dump: writes the structure of the target's nameplate (frames, regions, anchors, textures) to
+-- TrisThreatDB.dump (saved on /reload) so the skin integration can be built against what the client really has.
+local function dumpNameplate()
+    local plate = C_NamePlate.GetNamePlateForUnit("target") or (C_NamePlate.GetNamePlates()[1])
+    if not plate then print("|cffe0ad3dTrisThreat|r: " .. L["Target an enemy first."]); return end
+    local out = {}
+    local function safe(fn, ...)
+        local ok, a, b, c, d, e = pcall(fn, ...)
+        if not ok then return "?" end
+        if issecretvalue and issecretvalue(a) then return "<secret>" end
+        return a, b, c, d, e
+    end
+    local function keyOf(parent, child)
+        for k, v in pairs(parent) do
+            if v == child and type(k) == "string" then return k end
+        end
+        return "-"
+    end
+    local function describe(obj, key, depth)
+        local indent = string.rep("  ", depth)
+        local kind = safe(obj.GetObjectType, obj)
+        local name = obj.GetName and safe(obj.GetName, obj) or nil
+        local parts = { indent .. tostring(key) .. " [" .. tostring(kind) .. "]" .. (name and (" name=" .. tostring(name)) or "") }
+        if obj.GetWidth then
+            parts[#parts + 1] = string.format("size=%sx%s", tostring(safe(obj.GetWidth, obj)), tostring(safe(obj.GetHeight, obj)))
+        end
+        if obj.IsShown then parts[#parts + 1] = "shown=" .. tostring(safe(obj.IsShown, obj)) end
+        if obj.GetAlpha then parts[#parts + 1] = "alpha=" .. tostring(safe(obj.GetAlpha, obj)) end
+        if obj.GetNumPoints then
+            for i = 1, (safe(obj.GetNumPoints, obj) or 0) do
+                local point, rel, relPoint, x, y = safe(obj.GetPoint, obj, i)
+                local relName = "?"
+                if type(rel) == "table" then
+                    relName = (rel.GetName and safe(rel.GetName, rel)) or (rel.GetObjectType and safe(rel.GetObjectType, rel)) or "?"
+                end
+                parts[#parts + 1] = string.format("pt%d=%s>%s:%s(%s,%s)", i, tostring(point), tostring(relName), tostring(relPoint), tostring(x), tostring(y))
+            end
+        end
+        if kind == "Texture" then
+            parts[#parts + 1] = "atlas=" .. tostring(safe(obj.GetAtlas, obj)) .. " tex=" .. tostring(safe(obj.GetTexture, obj))
+            local r, g, b, a = safe(obj.GetVertexColor, obj)
+            parts[#parts + 1] = string.format("vc=%s,%s,%s,%s layer=%s", tostring(r), tostring(g), tostring(b), tostring(a), tostring(safe(obj.GetDrawLayer, obj)))
+        elseif kind == "FontString" then
+            local font, size, flags = safe(obj.GetFont, obj)
+            parts[#parts + 1] = string.format("font=%s,%s,%s text=%s", tostring(font), tostring(size), tostring(flags), tostring(safe(obj.GetText, obj)))
+        elseif kind == "StatusBar" then
+            local tex = safe(obj.GetStatusBarTexture, obj)
+            if type(tex) == "table" then
+                parts[#parts + 1] = "barTex=" .. tostring(safe(tex.GetTexture, tex)) .. " atlas=" .. tostring(safe(tex.GetAtlas, tex))
+            end
+        end
+        out[#out + 1] = table.concat(parts, " ")
+        if depth >= 5 then return end
+        if obj.GetRegions then
+            for _, region in ipairs({ obj:GetRegions() }) do describe(region, keyOf(obj, region), depth + 1) end
+        end
+        if obj.GetChildren then
+            for _, child in ipairs({ obj:GetChildren() }) do describe(child, keyOf(obj, child), depth + 1) end
+        end
+    end
+    describe(plate, "plate", 0)
+    TrisThreatDB.dump = { build = (select(4, GetBuildInfo())), lines = out }
+    print("|cffe0ad3dTrisThreat|r: dumped " .. #out .. " nameplate elements. /reload to save them to the SavedVariables.")
+end
+
 SlashCmdList["TRISTHREAT"] = function(message)
+    if (message or ""):lower():match("^%s*dump") then dumpNameplate(); return end
     if (message or ""):lower():match("^%s*probe") then
         local ok = ns.ProbeCurve(70)
         print("|cffe0ad3dTrisThreat|r probe: color curve " .. (ok and "works for plain numbers" or "NOT available"))
