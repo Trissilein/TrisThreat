@@ -39,3 +39,7 @@ pwsh tools/New-ReleaseArchive.ps1 -Version <v>      # builds release/TrisThreat-
 ## License
 
 MIT. See [LICENSE](LICENSE). The embedded libraries in `Libs/` keep their own licenses.
+
+## Releases
+
+A tag `v<version>` on `main` runs `.github/workflows/release.yml`: it verifies the tagged commit, builds the ZIP, uploads it to Wago and CurseForge (project IDs from the TOC fields `X-Wago-ID` / `X-Curse-Project-ID`, Retail and Forever game versions) and creates the GitHub release for WowUp. One stable release per Europe/Berlin day; a failed platform is resumed with **Actions → Release TrisThreat → Run workflow** for the same version.
