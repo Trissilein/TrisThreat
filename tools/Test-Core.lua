@@ -86,8 +86,8 @@ check("badge left pushes raid icon left", bl.points[1][1] == "RIGHT" and bl.room
 check("badge top pushes the name up", ns.Layout("badge", "top", m, db2).room.nameY == 27)
 check("badge bottom needs no room", ns.Layout("badge", "bottom", m, db2).room.nameY == 0)
 local seg = ns.Layout("segment", "top", m, db2)
-check("segment coerces top to left, no room", seg.look == "segment" and seg.points[1][1] == "LEFT" and seg.h == 20 and seg.room.healthTextX == 0)
-check("segment right shifts the health text", ns.Layout("segment", "right", m, db2).room.healthTextX == -40)
+check("segment coerces top to left, no room", seg.look == "segment" and seg.points[1][1] == "LEFT" and seg.points[1][4] == 2 and seg.h == 17 and seg.room.healthTextX == 0)
+check("segment right shifts the health text", ns.Layout("segment", "right", m, db2).room.healthTextX == -42)
 local st = ns.Layout("strip", "left", m, db2)
 check("strip coerces to top, full bar width, pushes name", st.look == "strip" and #st.points == 2 and st.w == 190
     and st.h == 7 and st.room.nameY == 12)

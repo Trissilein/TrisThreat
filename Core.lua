@@ -254,13 +254,17 @@ function ns.Layout(mode, side, m, db)
 
     if mode == "segment" then
         spec.look = "segment"
-        spec.h = barH
+        -- Only over the fill: the bar atlas has a ~1 px rim at the top, ~2 px at the bottom and the ends, which
+        -- the frame around it continues. Covering that rim looked broken.
+        local insetTop, insetBottom, insetSide = 1, 2, 2
+        spec.h = barH - insetTop - insetBottom
         spec.w = math.floor(barH * 2 + 0.5)
+        local y = (insetBottom - insetTop) / 2
         if side == "right" then
-            spec.points = { { "RIGHT", "bar", "RIGHT", 0, 0 } }
-            room.healthTextX = -spec.w
+            spec.points = { { "RIGHT", "bar", "RIGHT", -insetSide, y } }
+            room.healthTextX = -(spec.w + insetSide)
         else
-            spec.points = { { "LEFT", "bar", "LEFT", 0, 0 } }
+            spec.points = { { "LEFT", "bar", "LEFT", insetSide, y } }
         end
         return spec
     end
