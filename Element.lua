@@ -90,7 +90,10 @@ local function configure(el, look, side)
         el.divider:SetPoint("BOTTOM" .. edge, el, "BOTTOM" .. edge, 0, 0)
         el.divider:Show()
         setFont(el.text, "SystemFont_NamePlate_Outlined", 9)
-        el.text:SetPoint("CENTER", el, "CENTER", 0, 0)
+        el.text:SetPoint("LEFT", el, "LEFT", 2, 0)
+        el.text:SetPoint("RIGHT", el, "RIGHT", -2, 0)
+        el.text:SetJustifyH("CENTER")
+        el.text:SetWordWrap(false)
     else -- badge / floating
         ns.SetArt(el.bg, ATLAS_BADGE, FALLBACK_BADGE)
         el.bg:SetAllPoints()
@@ -103,7 +106,11 @@ local function configure(el, look, side)
             el.selected:SetPoint("BOTTOMRIGHT", el, "BOTTOMRIGHT", 3, -4)
         end
         setFont(el.text, "SystemFont_NamePlateLevel", 10)
-        el.text:SetPoint("CENTER", el, "CENTER", 0, 0.5)
+        -- Pinned to both inner edges and centered: stays centered whatever the plate's font size or scale is.
+        el.text:SetPoint("LEFT", el, "LEFT", 3, 0.5)
+        el.text:SetPoint("RIGHT", el, "RIGHT", -3, 0.5)
+        el.text:SetJustifyH("CENTER")
+        el.text:SetWordWrap(false)
     end
 end
 
@@ -121,6 +128,10 @@ function ns.PlaceElement(el, parts, spec)
         el:SetPoint(p[1], rel, p[3], p[4], p[5])
     end
     configure(el, spec.look, ns.EffectiveSide(TrisThreatDB.mode, TrisThreatDB.side))
+    -- Text height follows the element like Blizzard's level text (10 on a 23 px badge), not the font object's
+    -- size, which the nameplate size setting changes in the world but not in the options preview.
+    local textHeight = spec.look == "strip" and 10 or spec.look == "segment" and spec.h * 0.6 or spec.h * 0.43
+    pcall(el.text.SetTextHeight, el.text, math.max(7, math.floor(textHeight + 0.5)))
 end
 
 local function setBarColor(bar, color, alpha)
