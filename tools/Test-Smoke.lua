@@ -139,3 +139,34 @@ _G.UnitThreatSituation = function() return 3 end
 ns.UpdateUnit("nameplate1")
 check("tank strip updates with the lead", true)
 TrisThreatDB.role = "auto"
+
+-- Foreign icon (Questie style): pushed out of a left badge and kept there when its addon re-anchors it.
+do
+    local realHook = _G.hooksecurefunc
+    _G.hooksecurefunc = function(obj, name, post)
+        local orig = obj[name]
+        obj[name] = function(...) local r = orig(...); post(...); return r end
+    end
+    local function plainFrame(left, bottom, w, h)
+        local f = { x = 0, y = 0 }
+        function f:GetRect() return left + self.x, bottom + self.y, w, h end
+        function f:GetEffectiveScale() return 1 end
+        function f:IsVisible() return true end
+        function f:SetPoint(_, x, y) self.x, self.y = x or 0, y or 0 end
+        function f:AdjustPointsOffset(dx, dy) self.x, self.y = self.x + dx, self.y + dy end
+        return f
+    end
+    local icon = plainFrame(95, 4, 16, 16)          -- overlaps the badge's left part
+    local holder = Stub()
+    holder.GetChildren = function() return icon end
+    holder.GetParent = function() return nil end
+    local el = plainFrame(100, 0, 50, 25)
+    ns.PushForeign(el, { uf = holder }, "left")
+    check("overlapping icon is pushed left of the badge", icon.x == -(95 + 16 - (100 - 2)))
+    local pushed = icon.x
+    icon:SetPoint("LEFT", 0, 0)                     -- its addon re-anchors it
+    check("the push survives the other addon's SetPoint", icon.x == pushed)
+    ns.ReleaseForeign(el)
+    check("release gives the icon its own position back", icon.x == 0)
+    _G.hooksecurefunc = realHook
+end

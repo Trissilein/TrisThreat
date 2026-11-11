@@ -78,7 +78,7 @@ check("normalize repairs mode and side", ns.NormalizeDB({ mode = "x", side = "y"
     and ns.NormalizeDB({ side = "middle" }).side == "right")
 local b = ns.Layout("badge", "right", m, db2)
 check("badge right chains to the level badge", b.points[1][2] == "level" and b.points[1][4] == 5 and b.room.rightX == b.w + 5
-    and b.h == 25 and b.w == 38)
+    and b.h == 25 and b.w == 50)
 local bNoLevel = ns.Layout("badge", "right", { barW = 190, barH = 20 }, db2)
 check("badge right without level badge sits on the bar", bNoLevel.points[1][2] == "bar" and bNoLevel.h == 25)
 local bl = ns.Layout("badge", "left", m, db2)

@@ -204,7 +204,7 @@ end
 -- Measurements follow Blizzard's Forever nameplate (Blizzard_NamePlates, Camelot level badge): the badge is
 -- 5 px beside the bar, 3 px above and 2 px below it; the bar frame's shadow reaches 6 px below the bar.
 ns.BADGE_GAP = 5
-ns.BADGE_WIDTH_FACTOR = 38 / 25   -- a level badge is 28 wide for "22"; ours holds "100%"
+ns.BADGE_WIDTH_FACTOR = 50 / 25   -- a level badge is 28 wide for "22"; ours holds "100%"
 
 -- Effective side per mode: segments sit in the bar's left/right end, strips above/below it.
 function ns.EffectiveSide(mode, side)

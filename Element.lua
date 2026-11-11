@@ -146,7 +146,7 @@ function ns.PlaceElement(el, parts, spec)
     configure(el, spec.look, ns.EffectiveSide(TrisThreatDB.mode, TrisThreatDB.side))
     -- Text height follows the element like Blizzard's level text (10 on a 23 px badge), not the font object's
     -- size, which the nameplate size setting changes in the world but not in the options preview.
-    local textHeight = spec.look == "strip" and 10 or spec.look == "segment" and spec.h * 0.6 or spec.h * 0.43
+    local textHeight = spec.look == "strip" and 10 or spec.look == "segment" and spec.h * 0.6 or spec.h * 0.4
     pcall(el.text.SetTextHeight, el.text, math.max(7, math.floor(textHeight + 0.5)))
 end
 
@@ -263,16 +263,52 @@ local function screenRect(frame)
     return left * scale, (left + width) * scale, (bottom + height) * scale, bottom * scale, width, height
 end
 
-local function firstOffset(frame)
-    local ok, _, _, _, x, y = pcall(frame.GetPoint, frame, 1)
-    if ok then return x, y end
+-- Other addons re-anchor their icons on their own schedule (Questie calls SetPoint("LEFT", x, y) on every
+-- refresh). A post-hook on that icon's SetPoint adds our shift to whatever it sets, so the icon stays out of
+-- the way between our own updates; with no shift stored the hook does nothing.
+local function hookSetPoint(frame)
+    if frame.trisThreatShiftHooked then return end
+    frame.trisThreatShiftHooked = true
+    hooksecurefunc(frame, "SetPoint", function(self, point, a, b, c, d)
+        local shift = self.trisThreatShift
+        if self.trisThreatApplying or not shift then return end
+        self.trisThreatApplying = true
+        if type(a) == "number" then                       -- (point, x, y)
+            pcall(self.SetPoint, self, point, a + shift.dx, (b or 0) + shift.dy)
+        elseif type(b) == "number" then                   -- (point, relativeTo, x, y)
+            pcall(self.SetPoint, self, point, a, b + shift.dx, (c or 0) + shift.dy)
+        elseif type(c) == "number" then                   -- (point, relativeTo, relativePoint, x, y)
+            pcall(self.SetPoint, self, point, a, b, c + shift.dx, (d or 0) + shift.dy)
+        elseif a ~= nil then                              -- (point, relativeTo[, relativePoint])
+            pcall(self.SetPoint, self, point, a, b or point, shift.dx, shift.dy)
+        else                                              -- (point)
+            pcall(self.SetPoint, self, point, shift.dx, shift.dy)
+        end
+        self.trisThreatApplying = nil
+    end)
+end
+
+local function shiftForeign(frame, dx, dy)
+    hookSetPoint(frame)
+    frame.trisThreatShift = { dx = dx, dy = dy }
+    frame.trisThreatApplying = true
+    local ok = pcall(frame.AdjustPointsOffset, frame, dx, dy)
+    frame.trisThreatApplying = nil
+    if not ok then frame.trisThreatShift = nil end
+    return ok
+end
+
+local function unshiftForeign(frame)
+    local shift = frame.trisThreatShift
+    if not shift then return end
+    frame.trisThreatShift = nil
+    frame.trisThreatApplying = true
+    pcall(frame.AdjustPointsOffset, frame, -shift.dx, -shift.dy)
+    frame.trisThreatApplying = nil
 end
 
 function ns.ReleaseForeign(el)
-    for _, moved in ipairs(el.movedForeign or {}) do
-        local x, y = firstOffset(moved.frame)
-        if x == moved.x and y == moved.y then pcall(moved.frame.AdjustPointsOffset, moved.frame, -moved.dx, -moved.dy) end
-    end
+    for _, frame in ipairs(el.movedForeign or {}) do unshiftForeign(frame) end
     el.movedForeign = nil
 end
 
@@ -301,10 +337,7 @@ function ns.PushForeign(el, parts, side)
         else dy = (B - gap) - t end
         local scale = frame:GetEffectiveScale()
         dx, dy = dx / scale, dy / scale
-        if pcall(frame.AdjustPointsOffset, frame, dx, dy) then
-            local x, y = firstOffset(frame)
-            moved[#moved + 1] = { frame = frame, dx = dx, dy = dy, x = x, y = y }
-        end
+        if shiftForeign(frame, dx, dy) then moved[#moved + 1] = frame end
     end
     for _, child in ipairs({ parts.uf:GetChildren() }) do consider(child) end
     local plate = parts.uf:GetParent()
