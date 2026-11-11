@@ -15,6 +15,7 @@ ns.defaults = {
     offsetY = 0,
     scale = 1,
     showBar = true,
+    colorBar = true,     -- also tint the nameplate bar
     onlyInstances = false,
     hideTrivial = true,
     offTank = true,
@@ -44,7 +45,7 @@ function ns.NormalizeDB(db)
     db.offsetX = ns.ClampOffset(db.offsetX)
     db.offsetY = ns.ClampOffset(db.offsetY)
     db.scale = clamp(db.scale, 0.5, 2, 1)
-    for _, key in ipairs({ "showBar", "hideTrivial", "offTank" }) do
+    for _, key in ipairs({ "showBar", "colorBar", "hideTrivial", "offTank" }) do
         if db[key] == nil then db[key] = d[key] end
         db[key] = db[key] == true
     end

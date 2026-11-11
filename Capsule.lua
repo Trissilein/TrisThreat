@@ -6,6 +6,11 @@ local TEXTURE_FILL = "Interface\\AddOns\\TrisThreat\\Assets\\Capsule_Fill.tga"
 local TEXTURE_BORDER = "Interface\\AddOns\\TrisThreat\\Assets\\Capsule_Border.tga"
 local WIDTH, HEIGHT = 56, 28
 
+-- Default placement: the capsule's bottom-left corner sits on the health bar's top-left corner, pulled a little
+-- onto the bar so it looks attached. The user's offsets are added on top.
+local BASE_X, BASE_Y = -6, -8
+
+local tints = {}    -- unit token -> { r, g, b } while the nameplate bar is colored by threat
 local active = {}   -- unit token -> capsule
 local pool = {}
 local preview       -- capsule shown by the options window
@@ -46,6 +51,69 @@ local function createCapsule()
     return f
 end
 
+----------------------------------------------------------------------------------------------------
+-- Nameplate bar: find it, anchor to it, tint it (Platynator and Blizzard nameplates)
+----------------------------------------------------------------------------------------------------
+
+-- Returns the bar frame to anchor to, the owner used for tinting and the kind ("platynator" | "blizzard" | nil).
+local function findBar(plate)
+    for _, child in ipairs({ plate:GetChildren() }) do
+        local widgets = child.widgets
+        if type(widgets) == "table" then
+            for _, widget in ipairs(widgets) do
+                if type(widget) == "table" and widget.statusBar and widget.UpdateHealth then
+                    return widget.statusBar, widget, "platynator"
+                end
+            end
+        end
+    end
+    local unitFrame = plate.UnitFrame
+    if unitFrame and unitFrame.healthBar then return unitFrame.healthBar, unitFrame, "blizzard" end
+    return plate, nil, nil
+end
+
+local function applyTint(kind, owner, color)
+    if not (owner and color) then return end
+    pcall(function()
+        if kind == "platynator" then
+            owner.statusBar:GetStatusBarTexture():SetVertexColor(color[1], color[2], color[3])
+            if owner.statusBarCutaway and owner.details and owner.details.animate then
+                owner.statusBarCutaway:GetStatusBarTexture():SetVertexColor(color[1], color[2], color[3])
+            end
+        elseif kind == "blizzard" then
+            owner.healthBar:SetStatusBarColor(color[1], color[2], color[3])
+        end
+    end)
+end
+
+-- Give the nameplate its own color logic back.
+local function restoreTint(kind, owner)
+    pcall(function()
+        if kind == "platynator" and owner.ColorEventHandler then
+            owner:ColorEventHandler("")
+        elseif kind == "blizzard" and CompactUnitFrame_UpdateHealthColor then
+            CompactUnitFrame_UpdateHealthColor(owner)
+        end
+    end)
+end
+
+-- Both plate addons repaint their bar on their own events; a post-hook puts our color back on top.
+local function hookOwner(kind, owner)
+    if kind ~= "platynator" or owner.trisThreatHooked then return end
+    owner.trisThreatHooked = true
+    hooksecurefunc(owner, "SetColor", function(self)
+        local unit = self.unit
+        if unit and not issecretvalue(unit) and tints[unit] then applyTint("platynator", self, tints[unit]) end
+    end)
+end
+
+if CompactUnitFrame_UpdateHealthColor then
+    hooksecurefunc("CompactUnitFrame_UpdateHealthColor", function(frame)
+        local unit = frame and frame.unit
+        if unit and not issecretvalue(unit) and tints[unit] then applyTint("blizzard", frame, tints[unit]) end
+    end)
+end
+
 local function acquire()
     return table.remove(pool) or createCapsule()
 end
@@ -54,6 +122,9 @@ local function release(unit)
     local f = active[unit]
     if not f then return end
     active[unit] = nil
+    tints[unit] = nil
+    if f.tintOwner then restoreTint(f.tintKind, f.tintOwner) end
+    f.tintOwner, f.tintKind = nil, nil
     f:Hide()
     f:ClearAllPoints()
     f:SetParent(UIParent)
@@ -63,12 +134,14 @@ end
 local function layout(f, plate)
     local db = TrisThreatDB
     local scale = db.scale
+    local bar, owner, kind = findBar(plate)
     f:SetParent(plate)
     f:SetScale(scale)
     f:ClearAllPoints()
-    -- Default: attached to the plate's top-left corner. Offsets are plate pixels (positive = right / up).
-    f:SetPoint("TOPLEFT", plate, "TOPLEFT", db.offsetX / scale, db.offsetY / scale)
+    f:SetPoint("BOTTOMLEFT", bar, "TOPLEFT", (BASE_X + db.offsetX) / scale, (BASE_Y + db.offsetY) / scale)
     f:SetFrameStrata("HIGH")
+    f.tintOwner, f.tintKind = owner, kind
+    if owner then hookOwner(kind, owner) end
 end
 
 local function paint(f, colorKey, textValue, barValue)
@@ -169,6 +242,13 @@ function ns.UpdateUnit(unit)
     if not f then f = acquire(); active[unit] = f end
     layout(f, plate)
     paint(f, colorKey, text, barValue)
+    if db.colorBar and f.tintOwner then
+        tints[unit] = ns.COLORS[colorKey] or ns.COLORS.unknown
+        applyTint(f.tintKind, f.tintOwner, tints[unit])
+    elseif tints[unit] then
+        tints[unit] = nil
+        restoreTint(f.tintKind, f.tintOwner)
+    end
 end
 
 local function plateUnit(plate)

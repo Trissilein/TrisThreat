@@ -6,7 +6,7 @@ end
 -- Normalize: defaults, repair, clamp, idempotent
 local db = ns.NormalizeDB(nil)
 check("empty db gets defaults", db.enabled and db.role == "auto" and db.value == "scaled" and db.offsetX == 0
-    and db.scale == 1 and db.minimap.hide == false)
+    and db.scale == 1 and db.minimap.hide == false and db.colorBar == true)
 local bad = ns.NormalizeDB({ role = "x", value = "y", offsetX = 500, offsetY = -500, scale = 9, showBar = false,
     minimap = { hide = true } })
 check("bad values are repaired", bad.role == "auto" and bad.value == "scaled" and bad.offsetX == 100

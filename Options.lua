@@ -119,7 +119,7 @@ local ROLE_TEXT = { tank = "Tank", damage = "Damage dealer", healer = "Healer" }
 local function build()
     frame = CreateFrame("Frame", "TrisThreatOptions", UIParent, "BackdropTemplate")
     stylePanel(frame, 0.035, 0.04, 0.05)
-    frame:SetSize(420, 640)
+    frame:SetSize(420, 668)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
     frame:SetClampedToScreen(true)
@@ -198,6 +198,7 @@ local function build()
     y = y - 38
 
     heading(frame, "Colors", y); y = y - 26
+    checkbox(frame, "Color the nameplate by threat", y, "colorBar"); y = y - 26
     checkbox(frame, "Show fill bar", y, "showBar", function() ns.ApplyLayout() end); y = y - 26
     checkbox(frame, "Only in instances", y, "onlyInstances"); y = y - 26
     checkbox(frame, "Hide on trivial mobs", y, "hideTrivial"); y = y - 26
