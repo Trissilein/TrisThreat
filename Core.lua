@@ -247,7 +247,7 @@ function ns.Layout(mode, side, m, db)
     local barW, barH = m.barW or 190, m.barH or 20
     local badgeH = (m.levelShown and m.levelH) or (barH + 5)
     local badgeW = math.floor(badgeH * ns.BADGE_WIDTH_FACTOR + 0.5)
-    local room = { nameY = 0, leftX = 0, rightX = 0, healthTextX = 0 }
+    local room = { nameY = 0, leftX = 0, rightX = 0, healthTextX = 0, barY = 0 }
     local spec = { look = "badge", w = badgeW, h = badgeH, scale = 1, room = room }
     side = ns.EffectiveSide(mode, side)
 
@@ -275,6 +275,8 @@ function ns.Layout(mode, side, m, db)
             room.nameY = badgeH + 2
         else
             spec.points = { { "TOPLEFT", "bar", "BOTTOMLEFT", 0, -7 } }
+            -- The cast bar sits right under the health bar: lift the health bar so the badge fits between.
+            room.barY = badgeH + 7
         end
         return spec
     end
@@ -302,6 +304,8 @@ function ns.Layout(mode, side, m, db)
     spec.h = math.max(4, math.floor(barH * 0.35 + 0.5))
     if side == "bottom" then
         spec.points = { { "TOPLEFT", "bar", "BOTTOMLEFT", 0, -7 }, { "TOPRIGHT", "bar", "BOTTOMRIGHT", 0, -7 } }
+        -- Lift the health bar (name and auras follow it) so the cast bar below never covers the strip.
+        room.barY = spec.h + 7
     else
         spec.points = { { "BOTTOMLEFT", "bar", "TOPLEFT", 0, 5 }, { "BOTTOMRIGHT", "bar", "TOPRIGHT", 0, 5 } }
         room.nameY = spec.h + 5

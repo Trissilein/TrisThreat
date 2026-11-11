@@ -84,14 +84,16 @@ check("badge right without level badge sits on the bar", bNoLevel.points[1][2] =
 local bl = ns.Layout("badge", "left", m, db2)
 check("badge left pushes raid icon left", bl.points[1][1] == "RIGHT" and bl.room.leftX == -(bl.w + 5) and bl.room.rightX == 0)
 check("badge top pushes the name up", ns.Layout("badge", "top", m, db2).room.nameY == 27)
-check("badge bottom needs no room", ns.Layout("badge", "bottom", m, db2).room.nameY == 0)
+check("badge bottom lifts the health bar above the cast bar", ns.Layout("badge", "bottom", m, db2).room.nameY == 0
+    and ns.Layout("badge", "bottom", m, db2).room.barY == 32)
 local seg = ns.Layout("segment", "top", m, db2)
 check("segment coerces top to left, no room", seg.look == "segment" and seg.points[1][1] == "LEFT" and seg.points[1][4] == 2 and seg.h == 17 and seg.room.healthTextX == 0)
 check("segment right shifts the health text", ns.Layout("segment", "right", m, db2).room.healthTextX == -42)
 local st = ns.Layout("strip", "left", m, db2)
 check("strip coerces to top, full bar width, pushes name", st.look == "strip" and #st.points == 2 and st.w == 190
     and st.h == 7 and st.room.nameY == 12)
-check("strip bottom", ns.Layout("strip", "bottom", m, db2).points[1][1] == "TOPLEFT")
+check("strip bottom lifts the health bar", ns.Layout("strip", "bottom", m, db2).points[1][1] == "TOPLEFT"
+    and ns.Layout("strip", "bottom", m, db2).room.barY == 14)
 local fl = ns.Layout("floating", "right", m, ns.NormalizeDB({ offsetX = 20, offsetY = -10, scale = 2 }))
 check("floating uses offsets and scale", fl.scale == 2 and fl.points[1][4] == 10 and fl.points[1][5] == -3.5)
 

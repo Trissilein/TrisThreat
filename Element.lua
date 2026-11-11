@@ -210,6 +210,7 @@ local function shift(region, dx, dy)
 end
 
 local function applyDelta(uf, room, sign)
+    shift(uf.HealthBarsContainer, 0, sign * (room.barY or 0))
     shift(uf.name, 0, sign * room.nameY)
     shift(uf.RaidTargetFrame, sign * room.leftX, 0)
     local auras = uf.AurasFrame
@@ -224,11 +225,13 @@ end
 local function sameRoom(a, b)
     if a == nil or b == nil then return a == b end
     return a.nameY == b.nameY and a.leftX == b.leftX and a.rightX == b.rightX and a.healthTextX == b.healthTextX
+        and (a.barY or 0) == (b.barY or 0)
 end
 
 -- desired: room table or nil. uf.trisThreatRoom remembers what is applied right now.
 function ns.SyncRoom(uf, desired)
-    if desired and desired.nameY == 0 and desired.leftX == 0 and desired.rightX == 0 and desired.healthTextX == 0 then
+    if desired and desired.nameY == 0 and desired.leftX == 0 and desired.rightX == 0 and desired.healthTextX == 0
+        and (desired.barY or 0) == 0 then
         desired = nil
     end
     uf.trisThreatDesired = desired
@@ -238,6 +241,7 @@ function ns.SyncRoom(uf, desired)
     if desired then applyDelta(uf, desired, 1) end
     uf.trisThreatRoom = desired and {
         nameY = desired.nameY, leftX = desired.leftX, rightX = desired.rightX, healthTextX = desired.healthTextX,
+        barY = desired.barY or 0,
     } or nil
 end
 
