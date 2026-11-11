@@ -551,6 +551,10 @@ SlashCmdList["TRISTHREAT"] = function(message)
             local okTarget, color = ns.ProbeCurve(scaled)
             print("|cffe0ad3dTrisThreat|r probe: target threat " .. (scaled == nil and "none" or "read")
                 .. ", curve " .. (okTarget and "OK" or "FAILED") .. (color and "" or ""))
+            local lead = UnitThreatPercentageOfLead and UnitThreatPercentageOfLead("player", "target")
+            local okLead = ns.ProbeCurve(lead)
+            print("|cffe0ad3dTrisThreat|r probe: lead " .. (lead == nil and "none" or (issecretvalue and issecretvalue(lead)) and "secret" or tostring(lead))
+                .. ", curve " .. (okLead and "OK" or "FAILED"))
         end
         return
     end

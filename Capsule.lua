@@ -261,7 +261,13 @@ function ns.UpdateUnit(unit)
         local lead = UnitThreatPercentageOfLead("player", unit)
         -- Alone on the threat list there is no next player: a readable 0 means "all yours", so full and green.
         if lead ~= nil and not issecretvalue(lead) and lead <= 0 then lead = 200 end
-        if lead ~= nil then
+        -- Solo without a pet nobody else can be on the list. The lead is then a secret 0 (no next player),
+        -- which would show an empty bar: show the truth instead, all yours, full and green.
+        local alone = not (IsInGroup and IsInGroup()) and not UnitExists("pet")
+        if alone then
+            fill, low, high = 1, 0, 1
+            color = ns.COLORS.good
+        elseif lead ~= nil then
             fill, low, high = lead, 100, 200
             color = curveColor("lead", lead) or color
         end
