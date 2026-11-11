@@ -11,6 +11,10 @@ end
 
 local function addTooltipLines(tooltip)
     tooltip:AddLine("TrisThreat", 1, 0.82, 0.2)
+    if TrisThreatDB and ns.RoleModeText then
+        local text, manual = ns.RoleModeText()
+        tooltip:AddLine(L[text] .. (manual and (" (" .. L["set by hand"] .. ")") or (" (" .. L["detected"] .. ")")), 1, 1, 1)
+    end
     tooltip:AddLine(L["Click: open settings"], 0.85, 0.88, 0.94)
 end
 
@@ -30,6 +34,18 @@ end
 
 function TrisThreat_OnAddonCompartmentLeave()
     if GameTooltip then GameTooltip:Hide() end
+end
+
+-- Shows the current mode on the broker (Titan Panel text) and in the options window title.
+local shownMode
+function ns.UpdateModeDisplay()
+    if not (TrisThreatDB and ns.RoleModeText) then return end
+    local text, manual = ns.RoleModeText()
+    local label = L[text] .. (manual and "*" or "")
+    if label == shownMode then return end
+    shownMode = label
+    if launcher then launcher.text = label end
+    if ns.OnModeChanged then ns.OnModeChanged(label) end
 end
 
 function ns.ApplyMinimap()
@@ -55,13 +71,16 @@ local function register()
     local broker = LibStub("LibDataBroker-1.1", true)
     if not broker then return end
     launcher = broker:NewDataObject(addonName, {
-        type = "launcher",
+        -- A data source so Titan Panel and other displays show the current mode next to the icon.
+        type = "data source",
         label = "TrisThreat",
+        text = "",
         tocname = addonName,
         icon = ICON,
         OnClick = onClick,
         OnTooltipShow = addTooltipLines,
     })
+    ns.UpdateModeDisplay()
     local dbIcon = LibStub("LibDBIcon-1.0", true)
     if dbIcon then dbIcon:Register(addonName, launcher, TrisThreatDB.minimap) end
 end

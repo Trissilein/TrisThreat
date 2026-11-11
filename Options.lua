@@ -317,7 +317,13 @@ local function build()
     icon:SetSize(28, 28)
     icon:SetPoint("LEFT", 12, 0)
     icon:SetTexture("Interface\\AddOns\\TrisThreat\\Assets\\TrisThreatIcon.tga")
-    label(header, "TrisThreat", "GameFontNormalLarge"):SetPoint("LEFT", icon, "RIGHT", 8, 0)
+    local title = label(header, "TrisThreat", "GameFontNormalLarge")
+    title:SetPoint("LEFT", icon, "RIGHT", 8, 0)
+    -- Current mode right next to the title, so every review screenshot shows it.
+    local modeText = label(header, "", "GameFontHighlightLarge")
+    modeText:SetPoint("LEFT", title, "RIGHT", 12, 0)
+    modeText:SetTextColor(0.55, 0.85, 1)
+    ns.OnModeChanged = function(text) modeText:SetText("· " .. text) end
     local close = CreateFrame("Button", nil, header, "UIPanelCloseButton")
     close:SetPoint("RIGHT", -2, 0)
     close:SetScript("OnClick", function() frame:Hide() end)
@@ -449,6 +455,10 @@ local function refresh()
     if ns.detectedText then
         local role = ns.DetectRole()
         ns.detectedText:SetText(string.format(L["Detected: %s"], L[ROLE_TEXT[role]] or role))
+    end
+    if ns.OnModeChanged and ns.RoleModeText then
+        local text, manual = ns.RoleModeText()
+        ns.OnModeChanged(L[text] .. (manual and "*" or ""))
     end
     local floating = TrisThreatDB.mode == "floating"
     for _, control in ipairs(floatingOnly) do setEnabled(control, floating) end

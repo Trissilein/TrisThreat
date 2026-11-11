@@ -308,6 +308,7 @@ function ns.RefreshAll()
         if not seen[unit] then release(unit) end
     end
     if preview and preview:IsShown() then ns.ShowPreview() end
+    if ns.UpdateModeDisplay then ns.UpdateModeDisplay() end
 end
 
 -- Settings changed (mode, side, offsets, colors): re-place everything.

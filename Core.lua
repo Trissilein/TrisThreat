@@ -104,6 +104,14 @@ function ns.DetectRole()
     })
 end
 
+-- "Tank mode" / "DPS mode" / "Healer mode", plus whether it was detected or set by hand.
+ns.MODE_TEXT = { tank = "Tank mode", damage = "DPS mode", healer = "Healer mode" }
+function ns.RoleModeText()
+    local role = ns.GetRole()
+    local manual = TrisThreatDB and TrisThreatDB.role ~= "auto"
+    return ns.MODE_TEXT[role] or role, manual, role
+end
+
 function ns.GetRole()
     local choice = TrisThreatDB and TrisThreatDB.role or "auto"
     if choice ~= "auto" then return choice end

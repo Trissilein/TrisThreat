@@ -8,5 +8,5 @@
 - Display modes in Blizzard's nameplate art: badge (like the level badge, left/right/top/bottom), segment in the health bar, strip above/below the bar, or a floating capsule (offsets up to 100 pixels, size). Optional make-room moves name, raid icon and crowd-control icons aside.
 - Color combinations: number, background, nameplate bar.
 - Settings window with a live copy of the Blizzard nameplate, value mode and filters; while it is open, your target gets a test element without combat.
-- Titan Panel / LibDataBroker launcher, addon compartment entry and a minimap icon that can be hidden with a right-click.
+- Titan Panel / LibDataBroker display showing the current mode (Tank, DPS or Healer mode; * = set by hand), addon compartment entry and a minimap icon that can be hidden with a right-click.
 - Retail and WoW Forever (beta) in one package.
