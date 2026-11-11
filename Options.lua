@@ -556,6 +556,9 @@ SlashCmdList["TRISTHREAT"] = function(message)
             print("|cffe0ad3dTrisThreat|r probe: lead " .. (lead == nil and "none" or (issecretvalue and issecretvalue(lead)) and "secret" or tostring(lead))
                 .. ", curve " .. (okLead and "OK" or "FAILED"))
         end
+        if not UnitExists("target") then
+            print("|cffe0ad3dTrisThreat|r probe: no target - target an enemy in combat and run /tt probe again")
+        end
         return
     end
     ns.ToggleOptions()
