@@ -14,7 +14,13 @@ ns.defaults = {
     offsetX = 0,
     offsetY = 0,
     scale = 1,
-    colorBar = true,     -- also tint the nameplate bar
+    mode = "badge",      -- floating | badge | segment | strip
+    side = "right",      -- left | right | top | bottom (segment: left/right, strip: top/bottom)
+    makeRoom = true,     -- move Blizzard elements aside for the integrated modes
+    colorText = true,    -- threat color on the number
+    colorBackground = false, -- threat color on the badge/segment background (the strip fill is always colored)
+    stripText = true,    -- strip mode shows the number at its right end
+    colorBar = false,    -- also tint the nameplate health bar
     onlyInstances = false,
     hideTrivial = true,
     offTank = true,
@@ -23,6 +29,8 @@ ns.defaults = {
 
 local VALUE_MODES = { scaled = true, raw = true, lead = true }
 local ROLE_CHOICES = { auto = true, tank = true, damage = true, healer = true }
+local DISPLAY_MODES = { floating = true, badge = true, segment = true, strip = true }
+local SIDES = { left = true, right = true, top = true, bottom = true }
 
 local function clamp(value, low, high, fallback)
     value = tonumber(value)
@@ -44,7 +52,9 @@ function ns.NormalizeDB(db)
     db.offsetX = ns.ClampOffset(db.offsetX)
     db.offsetY = ns.ClampOffset(db.offsetY)
     db.scale = clamp(db.scale, 0.5, 2, 1)
-    for _, key in ipairs({ "colorBar", "hideTrivial", "offTank" }) do
+    db.mode = DISPLAY_MODES[db.mode] and db.mode or d.mode
+    db.side = SIDES[db.side] and db.side or d.side
+    for _, key in ipairs({ "makeRoom", "colorText", "colorBackground", "stripText", "colorBar", "hideTrivial", "offTank" }) do
         if db[key] == nil then db[key] = d[key] end
         db[key] = db[key] == true
     end
@@ -171,4 +181,85 @@ function ns.ShouldShow(db, classification, inInstance)
     if db.onlyInstances and not inInstance then return false end
     if db.hideTrivial and (classification == "trivial" or classification == "minus") then return false end
     return true
+end
+
+----------------------------------------------------------------------------------------------------
+-- Layout: where the threat element sits and how much room the Blizzard elements must give up
+----------------------------------------------------------------------------------------------------
+
+-- Measurements follow Blizzard's Forever nameplate (Blizzard_NamePlates, Camelot level badge): the badge is
+-- 5 px beside the bar, 3 px above and 2 px below it; the bar frame's shadow reaches 6 px below the bar.
+ns.BADGE_GAP = 5
+ns.BADGE_WIDTH_FACTOR = 38 / 25   -- a level badge is 28 wide for "22"; ours holds "100%"
+
+-- Effective side per mode: segments sit in the bar's left/right end, strips above/below it.
+function ns.EffectiveSide(mode, side)
+    if mode == "segment" then return side == "right" and "right" or "left" end
+    if mode == "strip" then return side == "bottom" and "bottom" or "top" end
+    return side
+end
+
+-- m = { barW, barH, levelShown, levelRight, levelW, levelH }; db for floating offsets/scale.
+-- Returns spec = { look, w, h, points = { { point, rel ("bar"|"level"), relPoint, x, y }, ... },
+--                  scale, room = { nameY, leftX, rightX, healthTextX } }.
+function ns.Layout(mode, side, m, db)
+    local barW, barH = m.barW or 190, m.barH or 20
+    local badgeH = (m.levelShown and m.levelH) or (barH + 5)
+    local badgeW = math.floor(badgeH * ns.BADGE_WIDTH_FACTOR + 0.5)
+    local room = { nameY = 0, leftX = 0, rightX = 0, healthTextX = 0 }
+    local spec = { look = "badge", w = badgeW, h = badgeH, scale = 1, room = room }
+    side = ns.EffectiveSide(mode, side)
+
+    if mode == "floating" then
+        local scale = db and db.scale or 1
+        spec.scale = scale
+        spec.points = { { "BOTTOMLEFT", "bar", "TOPLEFT", ((db and db.offsetX) or 0) / scale, (((db and db.offsetY) or 0) + 3) / scale } }
+        return spec
+    end
+
+    if mode == "badge" then
+        local gap = ns.BADGE_GAP
+        if side == "right" then
+            if m.levelShown and m.levelRight then
+                spec.points = { { "LEFT", "level", "RIGHT", gap, 0 } }
+            else
+                spec.points = { { "LEFT", "bar", "RIGHT", gap, 0.5 } }
+            end
+            room.rightX = badgeW + gap
+        elseif side == "left" then
+            spec.points = { { "RIGHT", "bar", "LEFT", -gap, 0.5 } }
+            room.leftX = -(badgeW + gap)
+        elseif side == "top" then
+            spec.points = { { "BOTTOMLEFT", "bar", "TOPLEFT", 0, 4 } }
+            room.nameY = badgeH + 2
+        else
+            spec.points = { { "TOPLEFT", "bar", "BOTTOMLEFT", 0, -7 } }
+        end
+        return spec
+    end
+
+    if mode == "segment" then
+        spec.look = "segment"
+        spec.h = barH
+        spec.w = math.floor(barH * 2 + 0.5)
+        if side == "right" then
+            spec.points = { { "RIGHT", "bar", "RIGHT", 0, 0 } }
+            room.healthTextX = -spec.w
+        else
+            spec.points = { { "LEFT", "bar", "LEFT", 0, 0 } }
+        end
+        return spec
+    end
+
+    -- strip
+    spec.look = "strip"
+    spec.w = barW
+    spec.h = math.max(4, math.floor(barH * 0.35 + 0.5))
+    if side == "bottom" then
+        spec.points = { { "TOPLEFT", "bar", "BOTTOMLEFT", 0, -7 }, { "TOPRIGHT", "bar", "BOTTOMRIGHT", 0, -7 } }
+    else
+        spec.points = { { "BOTTOMLEFT", "bar", "TOPLEFT", 0, 5 }, { "BOTTOMRIGHT", "bar", "TOPRIGHT", 0, 5 } }
+        room.nameY = spec.h + 5
+    end
+    return spec
 end

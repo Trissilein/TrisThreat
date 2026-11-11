@@ -4,7 +4,7 @@
 
 ## What it does
 
-- **Threat capsule:** the threat value as a number, in a tab that grows out of the enemy's health bar and shares its color.
+- **Native look:** the threat value as a second level badge, a segment in the health bar, a thin threat strip or a floating capsule, drawn with Blizzard's own nameplate art.
 - **Threat gradient:** the color changes with every percent, from green at 0 % to red at 100 %. As a tank it is mirrored, so holding the enemy is green. Another tank or your pet holding the enemy shows blue.
 - **Automatic role:** detected from your stance, form, group role or specialization, with a manual override.
 - **Your placement:** move the capsule up to 100 pixels left, right, up or down, and change its size. A preview shows it on your target.

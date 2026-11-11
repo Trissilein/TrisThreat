@@ -10,11 +10,13 @@ Retail compatibility: **12.1.5** (interface **120105**). WoW Forever compatibili
 
 ## What it does
 
-- A capsule on each enemy nameplate that fights you, with the threat value (for example `70%`). It grows out of the health bar like a tab and shares its color.
+- A threat element on each enemy nameplate that fights you, with the threat value (for example `70%`).
 - The color grades continuously with your threat, one step per percent: green at 0 %, yellow at 50 %, red at 100 %. As a tank the scale is mirrored, so 100 % (you hold the enemy) is green.
 - Role detection is automatic (stance, form or aura of a tank, then the assigned group role, then your specialization role) and can be overridden in the settings.
 - When another tank or your pet holds the enemy, the capsule turns blue instead of red (tank only).
-- Position the capsule up to 100 pixels left, right, up and down from the nameplate's top-left corner; size is adjustable. A preview button shows it on your target.
+- Four display modes in Blizzard's own nameplate art: a second level badge (left, right, top or bottom of the health bar), a segment inside the bar's end, a thin strip above or below the bar whose fill is your threat, or a floating capsule you move up to 100 pixels in every direction. Integrated modes can move the name, raid icon and crowd-control icons aside to make room.
+- Color the number, the background, the nameplate bar, or any combination.
+- The settings window shows a live copy of the Blizzard nameplate; while it is open, your target gets a test element without combat.
 - Settings from `/tristhreat` (or `/tt`), the addon compartment, a Titan Panel / LibDataBroker button or the minimap icon. Right-click the minimap icon to hide it; **Show minimap icon** in the settings brings it back.
 
 Threat values are secret values in current clients: the addon can show them but not compare or calculate with them. The color therefore comes from the threat status (0 to 3), the number and bar come from the value.

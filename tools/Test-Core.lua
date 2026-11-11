@@ -6,7 +6,7 @@ end
 -- Normalize: defaults, repair, clamp, idempotent
 local db = ns.NormalizeDB(nil)
 check("empty db gets defaults", db.enabled and db.role == "auto" and db.value == "scaled" and db.offsetX == 0
-    and db.scale == 1 and db.minimap.hide == false and db.colorBar == true)
+    and db.scale == 1 and db.minimap.hide == false and db.colorBar == false)
 local bad = ns.NormalizeDB({ role = "x", value = "y", offsetX = 500, offsetY = -500, scale = 9, hideTrivial = false,
     minimap = { hide = true } })
 check("bad values are repaired", bad.role == "auto" and bad.value == "scaled" and bad.offsetX == 100
@@ -68,3 +68,29 @@ check("gradient clamps and tolerates junk", near(ns.GradientColor(250, false)[1]
     and ns.GradientColor("x", false)[1] ~= nil)
 check("off-tank color beats the gradient for tanks only", ns.ColorForPercent(10, "tank", true) == ns.COLORS.offtank
     and ns.ColorForPercent(10, "damage", true) ~= ns.COLORS.offtank)
+
+-- Layout
+local m = { barW = 190, barH = 20, levelShown = true, levelRight = true, levelW = 28, levelH = 25 }
+local db2 = ns.NormalizeDB({})
+check("defaults: badge right, make room, color number", db2.mode == "badge" and db2.side == "right" and db2.makeRoom
+    and db2.colorText and not db2.colorBackground and not db2.colorBar and db2.stripText)
+check("normalize repairs mode and side", ns.NormalizeDB({ mode = "x", side = "y" }).mode == "badge"
+    and ns.NormalizeDB({ side = "middle" }).side == "right")
+local b = ns.Layout("badge", "right", m, db2)
+check("badge right chains to the level badge", b.points[1][2] == "level" and b.points[1][4] == 5 and b.room.rightX == b.w + 5
+    and b.h == 25 and b.w == 38)
+local bNoLevel = ns.Layout("badge", "right", { barW = 190, barH = 20 }, db2)
+check("badge right without level badge sits on the bar", bNoLevel.points[1][2] == "bar" and bNoLevel.h == 25)
+local bl = ns.Layout("badge", "left", m, db2)
+check("badge left pushes raid icon left", bl.points[1][1] == "RIGHT" and bl.room.leftX == -(bl.w + 5) and bl.room.rightX == 0)
+check("badge top pushes the name up", ns.Layout("badge", "top", m, db2).room.nameY == 27)
+check("badge bottom needs no room", ns.Layout("badge", "bottom", m, db2).room.nameY == 0)
+local seg = ns.Layout("segment", "top", m, db2)
+check("segment coerces top to left, no room", seg.look == "segment" and seg.points[1][1] == "LEFT" and seg.h == 20 and seg.room.healthTextX == 0)
+check("segment right shifts the health text", ns.Layout("segment", "right", m, db2).room.healthTextX == -40)
+local st = ns.Layout("strip", "left", m, db2)
+check("strip coerces to top, full bar width, pushes name", st.look == "strip" and #st.points == 2 and st.w == 190
+    and st.h == 7 and st.room.nameY == 12)
+check("strip bottom", ns.Layout("strip", "bottom", m, db2).points[1][1] == "TOPLEFT")
+local fl = ns.Layout("floating", "right", m, ns.NormalizeDB({ offsetX = 20, offsetY = -10, scale = 2 }))
+check("floating uses offsets and scale", fl.scale == 2 and fl.points[1][4] == 10 and fl.points[1][5] == -3.5)

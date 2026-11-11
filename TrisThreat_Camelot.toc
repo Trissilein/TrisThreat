@@ -17,6 +17,7 @@ Libs/LibDBIcon-1.0/LibDBIcon-1.0.lua
 Locales/enUS.lua
 Locales/deDE.lua
 Core.lua
+Element.lua
 Capsule.lua
 Options.lua
 Launcher.lua

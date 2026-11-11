@@ -2,7 +2,11 @@ local addonName, ns = ...
 local L = ns.L
 
 local frame
-local controls = {}
+local controls = {}       -- refresh functions
+local floatingOnly = {}   -- controls enabled only in floating mode
+
+local WIDTH, HEIGHT = 660, 640
+local COL1, COL2, COLW = 16, 342, 302
 
 -- Same look as the WoWraVox window: dark marble panel, gold corners, thin brown rules.
 local function stylePanel(panel, r, g, b)
@@ -32,52 +36,57 @@ local function label(parent, text, template)
     return fs
 end
 
-local function heading(parent, text, y)
+local function heading(parent, text, x, y)
     local fs = label(parent, text, "GameFontNormal")
-    fs:SetPoint("TOPLEFT", parent, "TOPLEFT", 18, y)
+    fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 2, y)
     local rule = parent:CreateTexture(nil, "BORDER")
     rule:SetColorTexture(0.35, 0.29, 0.18, 0.78)
     rule:SetHeight(1)
-    rule:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, y - 16)
-    rule:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -16, y - 16)
+    rule:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 16)
+    rule:SetWidth(COLW)
     return fs
 end
 
-local function checkbox(parent, text, y, key, onChange)
+local function onLayoutChanged()
+    ns.ApplyLayout()
+    if ns.RefreshOptions then ns.RefreshOptions() end
+end
+
+local function checkbox(parent, text, x, y, key)
     local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-    check:SetPoint("TOPLEFT", parent, "TOPLEFT", 14, y)
+    check:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 2, y)
     check:SetSize(24, 24)
-    local fs = label(parent, text)
-    fs:SetPoint("LEFT", check, "RIGHT", 4, 0)
+    check.label = label(parent, text)
+    check.label:SetPoint("LEFT", check, "RIGHT", 2, 0)
     check:SetScript("OnClick", function(self)
         TrisThreatDB[key] = self:GetChecked() and true or false
-        if onChange then onChange(TrisThreatDB[key]) end
-        ns.RefreshAll()
+        onLayoutChanged()
     end)
     controls[#controls + 1] = function() check:SetChecked(TrisThreatDB[key] == true) end
     return check
 end
 
-local function slider(parent, text, y, key, low, high, step, onChange)
+local function slider(parent, text, x, y, key, low, high, step)
     local fs = label(parent, text)
-    fs:SetPoint("TOPLEFT", parent, "TOPLEFT", 18, y)
+    fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 2, y)
     local valueText = label(parent, "", "GameFontNormalSmall")
-    valueText:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -20, y)
+    valueText:SetPoint("TOPRIGHT", parent, "TOPLEFT", x + COLW - 2, y)
     local s = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
-    s:SetPoint("TOPLEFT", parent, "TOPLEFT", 20, y - 20)
-    s:SetSize(parent:GetWidth() - 44, 16)
+    s:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 4, y - 20)
+    s:SetSize(COLW - 8, 16)
     s:SetMinMaxValues(low, high)
     s:SetValueStep(step)
     s:SetObeyStepOnDrag(true)
     if s.Low then s.Low:SetText(tostring(low)) end
     if s.High then s.High:SetText(tostring(high)) end
     local loading = false
-    s:SetScript("OnValueChanged", function(self, value)
+    s:SetScript("OnValueChanged", function(_, value)
         if loading then return end
         value = math.floor(value / step + 0.5) * step
         TrisThreatDB[key] = value
         valueText:SetText(tostring(value))
-        if onChange then onChange(value) end
+        ns.ApplyLayout()
+        if ns.RefreshMock then ns.RefreshMock() end
     end)
     controls[#controls + 1] = function()
         loading = true
@@ -85,13 +94,16 @@ local function slider(parent, text, y, key, low, high, step, onChange)
         valueText:SetText(tostring(TrisThreatDB[key]))
         loading = false
     end
+    s.title = fs
     return s
 end
 
-local function dropdown(parent, y, key, choices)
+local function dropdown(parent, text, x, y, key, choices)
+    local fs = label(parent, text)
+    fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 2, y - 6)
     local dd = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
-    dd:SetPoint("TOPLEFT", parent, "TOPLEFT", 150, y + 4)
-    UIDropDownMenu_SetWidth(dd, 190)
+    dd:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 92, y + 2)
+    UIDropDownMenu_SetWidth(dd, COLW - 128)
     local function textOf(value)
         for _, choice in ipairs(choices) do if choice.value == value then return L[choice.text] or choice.text end end
         return ""
@@ -104,8 +116,7 @@ local function dropdown(parent, y, key, choices)
             info.func = function()
                 TrisThreatDB[key] = choice.value
                 UIDropDownMenu_SetText(dd, textOf(choice.value))
-                ns.RefreshAll()
-                if ns.RefreshOptions then ns.RefreshOptions() end
+                onLayoutChanged()
             end
             UIDropDownMenu_AddButton(info)
         end
@@ -114,85 +125,125 @@ local function dropdown(parent, y, key, choices)
     return dd
 end
 
-local mock  -- mock nameplate in the options window: { panel, bar, capsule, states }
+----------------------------------------------------------------------------------------------------
+-- Mock nameplate: built from the same atlases, fonts and anchors as Blizzard's Forever nameplate
+-- (Blizzard_NamePlates: UpdateAnchors, Camelot level badge), and the threat element is placed on it by the
+-- exact code that places it in the world.
+----------------------------------------------------------------------------------------------------
 
-local function refreshMock()
-    if not mock then return end
-    local db = TrisThreatDB
-    ns.AnchorCapsule(mock.capsule, mock.bar, mock.panel)
-    -- The in-world capsule uses the HIGH strata, which sits below this DIALOG window: lift it into the preview.
-    mock.capsule:SetFrameStrata("DIALOG")
-    mock.capsule:SetFrameLevel(mock.panel:GetFrameLevel() + 10)
-    local c = ns.ColorForPercent(ns.previewPercent, ns.GetRole(), ns.previewOffTank)
-    local barColor = db.colorBar and c or { 0.78, 0.12, 0.12 }
-    mock.bar:SetStatusBarColor(barColor[1], barColor[2], barColor[3])
-    ns.PaintCapsule(mock.capsule, c, ns.previewPercent .. "%")
-    mock.percentText:SetText(ns.previewPercent .. "%")
+local mock
+
+local function mockIcon(parent, size, texture)
+    local t = parent:CreateTexture(nil, "ARTWORK")
+    t:SetSize(size, size)
+    t:SetTexture(texture)
+    t:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    return t
 end
 
-local function onLayoutChanged()
-    ns.ApplyLayout()
-    refreshMock()
+-- Blizzard's layout pass for the mock (mirrors NamePlateUnitFrameMixin:UpdateAnchors for "name above bar").
+local function layoutMock()
+    local uf, bar = mock.uf, mock.bar
+    bar:ClearAllPoints()
+    bar:SetPoint("CENTER", uf, "CENTER", -16, -8)
+    bar:SetSize(190, 20)
+    uf.name:ClearAllPoints()
+    uf.name:SetPoint("BOTTOMLEFT", bar, "TOPLEFT", 0, 2)
+    uf.name:SetPoint("RIGHT", uf.PlayerLevelDiffFrame, "RIGHT", 0, 0)
+    uf.RaidTargetFrame:ClearAllPoints()
+    uf.RaidTargetFrame:SetPoint("RIGHT", bar, "LEFT", 0, 0)
+    uf.AurasFrame.CrowdControlListFrame:ClearAllPoints()
+    uf.AurasFrame.CrowdControlListFrame:SetPoint("LEFT", uf.PlayerLevelDiffFrame, "RIGHT", 5, 0)
+    uf.AurasFrame.LossOfControlFrame:ClearAllPoints()
+    uf.AurasFrame.LossOfControlFrame:SetPoint("LEFT", uf.PlayerLevelDiffFrame, "RIGHT", 5, 0)
+    bar.LeftText:ClearAllPoints()
+    bar.LeftText:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
+    ns.RoomWasReset(uf)
 end
 
 local function buildMock(parent, y)
     local panel = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    panel:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, y)
-    panel:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -16, y)
+    panel:SetPoint("TOPLEFT", parent, "TOPLEFT", COL1, y)
+    panel:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -COL1, y)
     panel:SetHeight(150)
     panel:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-    panel:SetBackdropColor(0.09, 0.1, 0.06, 1)
+    panel:SetBackdropColor(0.16, 0.17, 0.13, 1)
     panel:SetBackdropBorderColor(0.35, 0.29, 0.18, 0.9)
     panel:SetClipsChildren(true)
-    local name = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    name:SetText("Blackrock Outrunner")
-    name:SetPoint("CENTER", panel, "CENTER", 0, 14)
-    -- Default Blizzard nameplate look: flat dark red bar, black background, 1 px black frame.
-    local frameBox = CreateFrame("Frame", nil, panel, "BackdropTemplate")
-    frameBox:SetSize(242, 18)
-    frameBox:SetPoint("TOP", name, "BOTTOM", 0, -3)
-    frameBox:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
-    frameBox:SetBackdropColor(0.05, 0.05, 0.05, 0.9)
-    frameBox:SetBackdropBorderColor(0, 0, 0, 1)
-    local bar = CreateFrame("StatusBar", nil, frameBox)
-    bar:SetPoint("TOPLEFT", 1, -1)
-    bar:SetPoint("BOTTOMRIGHT", -1, 1)
-    bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-TargetingFrame-BarFill")
-    bar:SetMinMaxValues(0, 100)
-    bar:SetValue(64)
-    local capsule = ns.CreateCapsule()
-    mock = { panel = panel, bar = bar, capsule = capsule }
 
-    -- Preview threat: the slider drives this mock and your target's capsule (no combat needed).
-    local previewLabel = label(panel, "Preview threat", "GameFontNormalSmall")
-    previewLabel:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 10)
-    local slider = CreateFrame("Slider", nil, panel, "OptionsSliderTemplate")
-    slider:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 110, 10)
-    slider:SetSize(190, 16)
-    slider:SetMinMaxValues(0, 100)
-    slider:SetValueStep(1)
-    slider:SetObeyStepOnDrag(true)
-    slider:SetValue(ns.previewPercent)
-    if slider.Low then slider.Low:SetText("") end
-    if slider.High then slider.High:SetText("") end
-    slider:SetScript("OnValueChanged", function(_, value)
-        ns.previewPercent = math.floor(value + 0.5)
-        refreshMock()
-        ns.ShowPreview()
-    end)
-    mock.percentText = label(panel, "", "GameFontNormalSmall")
-    mock.percentText:SetPoint("LEFT", slider, "RIGHT", 8, 0)
-    local off = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
-    off:SetSize(20, 20)
-    off:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -62, 8)
-    local offLabel = label(panel, "Off-tank", "GameFontNormalSmall")
-    offLabel:SetPoint("LEFT", off, "RIGHT", 2, 0)
-    off:SetScript("OnClick", function(self)
-        ns.previewOffTank = self:GetChecked() and true or false
-        refreshMock()
-        ns.ShowPreview()
-    end)
-    return panel
+    local uf = CreateFrame("Frame", nil, panel)
+    uf:SetAllPoints()
+    local bar = CreateFrame("StatusBar", nil, uf)
+    bar:SetMinMaxValues(0, 100)
+    bar:SetValue(100)
+    bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+    ns.SetArt(bar:GetStatusBarTexture(), "UI-HUD-CoolDownManager-Bar", "Interface\\TargetingFrame\\UI-TargetingFrame-BarFill", 1, 1, 1, 1)
+    bar.bgTexture = bar:CreateTexture(nil, "BACKGROUND")
+    ns.SetArt(bar.bgTexture, "UI-HUD-CoolDownManager-Bar-BG", "Interface\\Buttons\\WHITE8X8", 0, 0, 0, 0.85)
+    bar.bgTexture:SetPoint("TOPLEFT", bar, "TOPLEFT", -2, 3)
+    bar.bgTexture:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 6, -6)
+    bar.LeftText = bar:CreateFontString(nil, "OVERLAY")
+    ns.SetNameplateFont(bar.LeftText, "SystemFont_NamePlate_Outlined", 9)
+    bar.LeftText:SetText("100%")
+    bar.RightText = bar:CreateFontString(nil, "OVERLAY")
+    ns.SetNameplateFont(bar.RightText, "SystemFont_NamePlate_Outlined", 9)
+    bar.RightText:SetText("1,092")
+    bar.RightText:SetPoint("RIGHT", bar.LeftText, "LEFT", -2, 0)
+    pcall(bar.LeftText.SetTextHeight, bar.LeftText, 14)
+    pcall(bar.RightText.SetTextHeight, bar.RightText, 14)
+    uf.HealthBarsContainer = { healthBar = bar }
+
+    uf.name = uf:CreateFontString(nil, "OVERLAY")
+    ns.SetNameplateFont(uf.name, "SystemFont_NamePlate_Outlined", 9)
+    pcall(uf.name.SetTextHeight, uf.name, 14)
+    uf.name:SetJustifyH("CENTER")
+    uf.name:SetText("Blackrock Outrunner")
+
+    local level = CreateFrame("Frame", nil, uf)
+    level:SetPoint("TOPLEFT", bar, "TOPRIGHT", 5, 3)
+    level:SetPoint("BOTTOMLEFT", bar, "BOTTOMRIGHT", 5, -2)
+    level:SetWidth(28)
+    level.icon = level:CreateTexture(nil, "BACKGROUND")
+    level.icon:SetAllPoints()
+    ns.SetArt(level.icon, "ui-hud-nameplates-levelindicator", "Interface\\AddOns\\TrisThreat\\Assets\\Tab_Fill.tga")
+    level.text = level:CreateFontString(nil, "OVERLAY")
+    ns.SetNameplateFont(level.text, "SystemFont_NamePlateLevel", 10)
+    level.text:SetPoint("CENTER", 0, 0.5)
+    level.text:SetText("22")
+    level.text:SetTextColor(1, 0.82, 0)
+    uf.PlayerLevelDiffFrame = level
+
+    uf.RaidTargetFrame = CreateFrame("Frame", nil, uf)
+    uf.RaidTargetFrame:SetSize(22, 22)
+    local elite = uf.RaidTargetFrame:CreateTexture(nil, "ARTWORK")
+    elite:SetSize(20, 20)
+    elite:SetPoint("RIGHT", uf.RaidTargetFrame, "LEFT", 0, 0)
+    ns.SetArt(elite, "nameplates-icon-elite-gold", "Interface\\Buttons\\WHITE8X8", 0, 0, 0, 0)
+
+    uf.AurasFrame = { CrowdControlListFrame = CreateFrame("Frame", nil, uf), LossOfControlFrame = CreateFrame("Frame", nil, uf) }
+    uf.AurasFrame.CrowdControlListFrame:SetSize(20, 20)
+    mockIcon(uf.AurasFrame.CrowdControlListFrame, 20, "Interface\\Icons\\Spell_Nature_Polymorph"):SetPoint("LEFT")
+    uf.AurasFrame.LossOfControlFrame:SetSize(1, 1)
+    local debuffs = CreateFrame("Frame", nil, uf)
+    debuffs:SetSize(44, 20)
+    debuffs:SetPoint("BOTTOM", uf.name, "TOP", 0, 4)
+    mockIcon(debuffs, 20, "Interface\\Icons\\Spell_Holy_SealOfMight"):SetPoint("LEFT")
+    mockIcon(debuffs, 20, "Interface\\Icons\\Spell_Fire_Immolation"):SetPoint("RIGHT")
+
+    mock = { panel = panel, uf = uf, bar = bar, element = ns.CreateElement() }
+    mock.parts = { uf = uf, bar = bar, level = level, mock = true }
+end
+
+function ns.RefreshMock()
+    if not mock then return end
+    local db = TrisThreatDB
+    layoutMock()
+    local color = ns.ColorForPercent(ns.previewPercent, ns.GetRole(), ns.previewOffTank)
+    local barColor = db.colorBar and color or { 0.78, 0.12, 0.12 }
+    mock.bar:SetStatusBarColor(barColor[1], barColor[2], barColor[3])
+    ns.Arrange(mock.element, mock.parts)
+    ns.PaintElement(mock.element, color, ns.previewPercent .. "%", ns.previewPercent, true)
+    if mock.percentText then mock.percentText:SetText(ns.previewPercent .. "%") end
 end
 
 local ROLE_TEXT = { tank = "Tank", damage = "Damage dealer", healer = "Healer" }
@@ -200,8 +251,8 @@ local ROLE_TEXT = { tank = "Tank", damage = "Damage dealer", healer = "Healer" }
 local function build()
     frame = CreateFrame("Frame", "TrisThreatOptions", UIParent, "BackdropTemplate")
     stylePanel(frame, 0.035, 0.04, 0.05)
-    frame:SetSize(420, 826)
-    frame:SetScale(math.min(1, (UIParent:GetHeight() - 40) / 826))
+    frame:SetSize(WIDTH, HEIGHT)
+    frame:SetScale(math.min(1, (UIParent:GetHeight() - 40) / HEIGHT, (UIParent:GetWidth() - 40) / WIDTH))
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
     frame:SetClampedToScreen(true)
@@ -218,95 +269,129 @@ local function build()
     header:RegisterForDrag("LeftButton")
     header:SetScript("OnDragStart", function() frame:StartMoving() end)
     header:SetScript("OnDragStop", function() frame:StopMovingOrSizing() end)
-
     local icon = header:CreateTexture(nil, "ARTWORK")
     icon:SetSize(28, 28)
     icon:SetPoint("LEFT", 12, 0)
     icon:SetTexture("Interface\\AddOns\\TrisThreat\\Assets\\TrisThreatIcon.tga")
-    local title = label(header, "TrisThreat", "GameFontNormalLarge")
-    title:SetPoint("LEFT", icon, "RIGHT", 8, 0)
+    label(header, "TrisThreat", "GameFontNormalLarge"):SetPoint("LEFT", icon, "RIGHT", 8, 0)
     local close = CreateFrame("Button", nil, header, "UIPanelCloseButton")
     close:SetPoint("RIGHT", -2, 0)
     close:SetScript("OnClick", function() frame:Hide() end)
 
-    buildMock(frame, -48)
-    local y = -208
-    checkbox(frame, "Enabled", y, "enabled")
-    y = y - 34
+    buildMock(frame, -44)
 
-    heading(frame, "Role", y); y = y - 28
-    dropdown(frame, y, "role", {
+    -- Preview row (own row, below the mock)
+    local y = -202
+    label(frame, "Preview threat"):SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 2, y)
+    local previewSlider = CreateFrame("Slider", nil, frame, "OptionsSliderTemplate")
+    previewSlider:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 130, y + 1)
+    previewSlider:SetSize(300, 16)
+    previewSlider:SetMinMaxValues(0, 100)
+    previewSlider:SetValueStep(1)
+    previewSlider:SetObeyStepOnDrag(true)
+    previewSlider:SetValue(ns.previewPercent)
+    if previewSlider.Low then previewSlider.Low:SetText("") end
+    if previewSlider.High then previewSlider.High:SetText("") end
+    previewSlider:SetScript("OnValueChanged", function(_, value)
+        ns.previewPercent = math.floor(value + 0.5)
+        ns.RefreshMock()
+        ns.ShowPreview()
+    end)
+    mock.percentText = label(frame, "", "GameFontNormal")
+    mock.percentText:SetPoint("LEFT", previewSlider, "RIGHT", 10, 0)
+    local off = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
+    off:SetSize(24, 24)
+    off:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2 + 176, y + 5)
+    label(frame, "Off-tank"):SetPoint("LEFT", off, "RIGHT", 2, 0)
+    off:SetScript("OnClick", function(self)
+        ns.previewOffTank = self:GetChecked() and true or false
+        ns.RefreshMock()
+        ns.ShowPreview()
+    end)
+
+    -- Left column: display, colors, role and value
+    local yl = -236
+    heading(frame, "Display", COL1, yl); yl = yl - 28
+    dropdown(frame, "Mode", COL1, yl, "mode", {
+        { value = "badge", text = "Badge (like the level badge)" },
+        { value = "segment", text = "Segment in the health bar" },
+        { value = "strip", text = "Strip above or below the bar" },
+        { value = "floating", text = "Floating capsule" },
+    }); yl = yl - 34
+    dropdown(frame, "Side", COL1, yl, "side", {
+        { value = "right", text = "Right" }, { value = "left", text = "Left" },
+        { value = "top", text = "Top" }, { value = "bottom", text = "Bottom" },
+    }); yl = yl - 34
+    checkbox(frame, "Make room (move nameplate elements aside)", COL1, yl, "makeRoom"); yl = yl - 34
+
+    heading(frame, "Colors", COL1, yl); yl = yl - 24
+    checkbox(frame, "Color the number", COL1, yl, "colorText")
+    checkbox(frame, "Color the background", COL1 + 150, yl, "colorBackground"); yl = yl - 26
+    checkbox(frame, "Color the nameplate bar", COL1, yl, "colorBar")
+    checkbox(frame, "Number on the strip", COL1 + 150, yl, "stripText"); yl = yl - 26
+    checkbox(frame, "Off-tank color", COL1, yl, "offTank"); yl = yl - 30
+    local legend = label(frame, "Green at 0 % threat, red at 100 %. As a tank the scale is mirrored: 100 % (you hold it) is green.", "GameFontNormalSmall")
+    legend:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 2, yl)
+    legend:SetWidth(COLW)
+    legend:SetJustifyH("LEFT")
+
+    -- Right column: role, value, floating position, filters
+    local yr = -236
+    heading(frame, "Role and value", COL2, yr); yr = yr - 28
+    dropdown(frame, "Role", COL2, yr, "role", {
         { value = "auto", text = "Automatic" }, { value = "tank", text = "Tank" },
         { value = "damage", text = "Damage dealer" }, { value = "healer", text = "Healer" },
-    })
-    local roleLabel = label(frame, "Role")
-    roleLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, y - 2)
+    }); yr = yr - 26
     ns.detectedText = label(frame, "", "GameFontNormalSmall")
-    ns.detectedText:SetPoint("TOPLEFT", frame, "TOPLEFT", 150, y - 32)
-    y = y - 58
-
-    heading(frame, "Value shown", y); y = y - 28
-    dropdown(frame, y, "value", {
+    ns.detectedText:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2 + 112, yr)
+    yr = yr - 18
+    dropdown(frame, "Value", COL2, yr, "value", {
         { value = "scaled", text = "Threat to pull aggro (scaled)" },
         { value = "raw", text = "Share of the tank's threat (raw)" },
         { value = "lead", text = "Lead over the next player (tank)" },
-    })
-    y = y - 40
+    }); yr = yr - 40
 
-    heading(frame, "Position", y); y = y - 26
-    slider(frame, "Horizontal offset", y, "offsetX", -ns.OFFSET_LIMIT, ns.OFFSET_LIMIT, 1, onLayoutChanged); y = y - 48
-    slider(frame, "Vertical offset", y, "offsetY", -ns.OFFSET_LIMIT, ns.OFFSET_LIMIT, 1, onLayoutChanged); y = y - 48
-    slider(frame, "Size", y, "scale", 0.5, 2, 0.1, onLayoutChanged); y = y - 44
-    local hint = label(frame, "Nameplate offsets in pixels. Positive values move the capsule right and up.", "GameFontNormalSmall")
-    hint:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, y)
-    hint:SetPoint("RIGHT", frame, "RIGHT", -18, 0)
-    hint:SetJustifyH("LEFT")
-    y = y - 30
-
+    heading(frame, "Floating capsule", COL2, yr); yr = yr - 26
+    floatingOnly[#floatingOnly + 1] = slider(frame, "Horizontal offset", COL2, yr, "offsetX", -ns.OFFSET_LIMIT, ns.OFFSET_LIMIT, 1); yr = yr - 46
+    floatingOnly[#floatingOnly + 1] = slider(frame, "Vertical offset", COL2, yr, "offsetY", -ns.OFFSET_LIMIT, ns.OFFSET_LIMIT, 1); yr = yr - 46
+    floatingOnly[#floatingOnly + 1] = slider(frame, "Size", COL2, yr, "scale", 0.5, 2, 0.1); yr = yr - 44
     local reset = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    reset:SetSize(150, 22)
-    reset:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, y)
+    reset:SetSize(140, 22)
+    reset:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2, yr)
     reset:SetText(L["Reset position"])
     reset:SetScript("OnClick", function()
         TrisThreatDB.offsetX, TrisThreatDB.offsetY, TrisThreatDB.scale = 0, 0, 1
-        ns.RefreshOptions(); onLayoutChanged()
+        onLayoutChanged()
     end)
-    local previewButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    previewButton:SetSize(150, 22)
-    previewButton:SetPoint("LEFT", reset, "RIGHT", 8, 0)
-    previewButton:SetText(L["Preview on target"])
-    previewButton:SetScript("OnClick", function()
-        if not ns.ShowPreview() then print("|cffe0ad3dTrisThreat|r: " .. L["Target an enemy first."]) end
-    end)
-    y = y - 38
+    floatingOnly[#floatingOnly + 1] = reset
+    yr = yr - 34
 
-    heading(frame, "Colors", y); y = y - 26
-    checkbox(frame, "Color the nameplate by threat", y, "colorBar", function() onLayoutChanged() end); y = y - 26
-    checkbox(frame, "Only in instances", y, "onlyInstances"); y = y - 26
-    checkbox(frame, "Hide on trivial mobs", y, "hideTrivial"); y = y - 26
-    checkbox(frame, "Off-tank color", y, "offTank"); y = y - 28
-
-    local legend = label(frame, "Green at 0 % threat, red at 100 %. As a tank the scale is mirrored: 100 % (you hold it) is green.", "GameFontNormalSmall")
-    legend:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, y)
-    legend:SetPoint("RIGHT", frame, "RIGHT", -18, 0)
-    legend:SetJustifyH("LEFT")
-    y = y - 32
-
+    heading(frame, "Filters", COL2, yr); yr = yr - 24
+    checkbox(frame, "Enabled", COL2, yr, "enabled")
+    checkbox(frame, "Only in instances", COL2 + 150, yr, "onlyInstances"); yr = yr - 26
+    checkbox(frame, "Hide on trivial mobs", COL2, yr, "hideTrivial")
     -- The minimap flag lives in a sub-table and is stored inverted (hide), so this box is built by hand.
     local mini = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-    mini:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, y)
+    mini:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2 + 148, yr)
     mini:SetSize(24, 24)
-    label(frame, "Show minimap icon"):SetPoint("LEFT", mini, "RIGHT", 4, 0)
+    label(frame, "Show minimap icon"):SetPoint("LEFT", mini, "RIGHT", 2, 0)
     mini:SetScript("OnClick", function(self)
         TrisThreatDB.minimap.hide = not self:GetChecked()
         if ns.ApplyMinimap then ns.ApplyMinimap() end
     end)
     frame.minimapShow = mini
+
     frame:SetScript("OnHide", ns.HidePreview)
     frame:SetScript("OnShow", function()
-        refreshMock()
-        ns.ShowPreview() -- test mode: the target gets a capsule without combat
+        ns.RefreshMock()
+        ns.ShowPreview() -- test mode: the target gets the element without combat
     end)
+end
+
+local function setEnabled(control, enabled)
+    if control.SetEnabled then control:SetEnabled(enabled) end
+    control:SetAlpha(enabled and 1 or 0.4)
+    if control.title then control.title:SetAlpha(enabled and 1 or 0.4) end
 end
 
 local function refresh()
@@ -316,7 +401,9 @@ local function refresh()
         local role = ns.DetectRole()
         ns.detectedText:SetText(string.format(L["Detected: %s"], L[ROLE_TEXT[role]] or role))
     end
-    refreshMock()
+    local floating = TrisThreatDB.mode == "floating"
+    for _, control in ipairs(floatingOnly) do setEnabled(control, floating) end
+    ns.RefreshMock()
     if frame.minimapShow then frame.minimapShow:SetChecked(not TrisThreatDB.minimap.hide) end
 end
 ns.RefreshOptions = refresh

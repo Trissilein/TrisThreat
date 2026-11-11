@@ -1,181 +1,113 @@
 local addonName, ns = ...
-local L = ns.L
 local issecretvalue = issecretvalue or function() return false end
 
-local TEXTURE_FILL = "Interface\\AddOns\\TrisThreat\\Assets\\Tab_Fill.tga"
-local TEXTURE_BORDER = "Interface\\AddOns\\TrisThreat\\Assets\\Tab_Border.tga"
-local WIDTH, HEIGHT = 60, 22
-
--- The capsule is a tab that grows out of the health bar: flat bottom edge on the bar's top-left corner,
--- rounded top corners, same fill color as the bar. The user's offsets are added on top.
-local BASE_X, BASE_Y = 0, -1
-
-local tints = {}    -- unit token -> { r, g, b } while the nameplate bar is colored by threat
-local active = {}   -- unit token -> capsule
+local active = {}   -- unit token -> element
 local pool = {}
-local preview       -- capsule shown by the options window
+local tints = {}    -- unit token -> color while the Blizzard health bar is tinted by threat
+local preview       -- element shown on the target while the options window is open
 
 ----------------------------------------------------------------------------------------------------
--- Frame
+-- Nameplate parts. Blizzard plates get the integrated modes; any other nameplate addon gets the floating
+-- badge anchored to the plate (no knowledge of other addons' internals is used).
 ----------------------------------------------------------------------------------------------------
 
-function ns.CreateCapsule()
-    local f = CreateFrame("Frame", nil, UIParent)
-    f:SetSize(WIDTH, HEIGHT)
-    f:SetFrameStrata("HIGH")
-
-    f.fill = f:CreateTexture(nil, "BACKGROUND")
-    f.fill:SetAllPoints()
-    f.fill:SetTexture(TEXTURE_FILL)
-
-    -- A soft top-to-bottom sheen gives the flat color the same depth as a nameplate bar.
-    f.sheen = f:CreateTexture(nil, "BORDER")
-    f.sheen:SetAllPoints()
-    f.sheen:SetTexture(TEXTURE_FILL)
-    if f.sheen.SetGradient and CreateColor then
-        f.sheen:SetGradient("VERTICAL", CreateColor(0, 0, 0, 0.28), CreateColor(1, 1, 1, 0.22))
+local function getParts(plate)
+    local uf = plate.UnitFrame
+    local container = uf and uf.HealthBarsContainer
+    local bar = container and container.healthBar
+    if bar and uf.IsVisible and uf:IsVisible() then
+        local level = uf.PlayerLevelDiffFrame
+        return { uf = uf, bar = bar, level = level, blizzard = true }
     end
-
-    f.border = f:CreateTexture(nil, "ARTWORK")
-    f.border:SetAllPoints()
-    f.border:SetTexture(TEXTURE_BORDER)
-    f.border:SetVertexColor(0, 0, 0, 0.95)
-
-    f.text = f:CreateFontString(nil, "OVERLAY")
-    f.text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
-    f.text:SetPoint("CENTER", f, "CENTER", 0, 0)
-    f.text:SetTextColor(1, 1, 1, 1)
-    return f
+    return { uf = plate, bar = plate, blizzard = false }
 end
+ns.GetParts = getParts
 
-----------------------------------------------------------------------------------------------------
--- Nameplate bar: find it, anchor to it, tint it (Platynator and Blizzard nameplates)
-----------------------------------------------------------------------------------------------------
-
--- Returns the bar frame to anchor to, the owner used for tinting and the kind ("platynator" | "blizzard" | nil).
-local function findBar(plate)
-    for _, child in ipairs({ plate:GetChildren() }) do
-        local widgets = child.widgets
-        if type(widgets) == "table" then
-            for _, widget in ipairs(widgets) do
-                if type(widget) == "table" and widget.statusBar and widget.UpdateHealth then
-                    return widget.statusBar, widget, "platynator"
-                end
-            end
-        end
-    end
-    local unitFrame = plate.UnitFrame
-    if unitFrame and unitFrame.healthBar then return unitFrame.healthBar, unitFrame, "blizzard" end
-    return plate, nil, nil
-end
-
-local function applyTint(kind, owner, color)
-    if not (owner and color) then return end
-    pcall(function()
-        if kind == "platynator" then
-            owner.statusBar:GetStatusBarTexture():SetVertexColor(color[1], color[2], color[3])
-            if owner.statusBarCutaway and owner.details and owner.details.animate then
-                owner.statusBarCutaway:GetStatusBarTexture():SetVertexColor(color[1], color[2], color[3])
-            end
-        elseif kind == "blizzard" then
-            owner.healthBar:SetStatusBarColor(color[1], color[2], color[3])
-        end
-    end)
-end
-
--- The color the nameplate bar currently shows (nil when it cannot be read).
-local function readBarColor(kind, owner)
-    if not owner then return nil end
-    local ok, r, g, b = pcall(function()
-        if kind == "platynator" then return owner.statusBar:GetStatusBarTexture():GetVertexColor() end
-        if kind == "blizzard" then return owner.healthBar:GetStatusBarColor() end
-    end)
-    if ok and type(r) == "number" and type(g) == "number" and type(b) == "number"
-        and not issecretvalue(r) and not issecretvalue(g) and not issecretvalue(b) then
-        return { r, g, b }
-    end
+local function safeNumber(fn, obj)
+    local ok, value = pcall(fn, obj)
+    if ok and type(value) == "number" and not issecretvalue(value) then return value end
     return nil
 end
 
--- Give the nameplate its own color logic back.
-local function restoreTint(kind, owner)
-    pcall(function()
-        if kind == "platynator" and owner.ColorEventHandler then
-            owner:ColorEventHandler("")
-        elseif kind == "blizzard" and CompactUnitFrame_UpdateHealthColor then
-            CompactUnitFrame_UpdateHealthColor(owner)
-        end
-    end)
+-- Measurements for ns.Layout from the live (or mock) parts.
+function ns.Measure(parts)
+    local m = { barW = safeNumber(parts.bar.GetWidth, parts.bar) or 190, barH = safeNumber(parts.bar.GetHeight, parts.bar) or 20 }
+    local level = parts.level
+    if level and level:IsShown() then
+        m.levelShown = true
+        m.levelW = safeNumber(level.GetWidth, level)
+        m.levelH = safeNumber(level.GetHeight, level)
+        -- Forever anchors the badge to the bar's right edge, Retail to its left: read the side from the anchor.
+        local ok, _, _, relPoint = pcall(level.GetPoint, level, 1)
+        m.levelRight = ok and type(relPoint) == "string" and relPoint:find("RIGHT") ~= nil
+        if not (m.levelW and m.levelH) then m.levelShown = false end
+    end
+    return m
 end
 
-local function followBar(unit, kind, owner)
-    local f = active[unit]
-    if not f or TrisThreatDB.colorBar then return end
-    local c = readBarColor(kind, owner)
-    if c then ns.PaintCapsule(f, c, nil) end
+local function hookLayout(uf)
+    if uf.trisThreatHooked or type(uf.UpdateAnchors) ~= "function" then return end
+    uf.trisThreatHooked = true
+    hooksecurefunc(uf, "UpdateAnchors", function(self) ns.RoomWasReset(self) end)
 end
 
--- Both plate addons repaint their bar on their own events; a post-hook puts our color back on top, or (when we
--- do not tint) lets the capsule follow the bar's color.
-local function hookOwner(kind, owner)
-    if kind ~= "platynator" or owner.trisThreatHooked then return end
-    owner.trisThreatHooked = true
-    hooksecurefunc(owner, "SetColor", function(self)
-        local unit = self.unit
-        if not unit or issecretvalue(unit) then return end
-        if tints[unit] then applyTint("platynator", self, tints[unit]) else followBar(unit, "platynator", self) end
-    end)
+-- Places an element on parts with the current settings. Returns the spec.
+function ns.Arrange(el, parts)
+    local db = TrisThreatDB
+    local mode = (parts.blizzard or parts.mock) and db.mode or "floating"
+    local spec = ns.Layout(mode, db.side, ns.Measure(parts), db)
+    ns.PlaceElement(el, parts, spec)
+    if parts.blizzard or parts.mock then
+        if parts.blizzard then hookLayout(parts.uf) end
+        ns.SyncRoom(parts.uf, (db.makeRoom and mode ~= "floating") and spec.room or nil)
+    end
+    return spec
+end
+
+----------------------------------------------------------------------------------------------------
+-- Health bar tint (Blizzard plates only, option "Color the nameplate bar")
+----------------------------------------------------------------------------------------------------
+
+local function applyTint(bar, color)
+    pcall(bar.SetStatusBarColor, bar, color[1], color[2], color[3])
 end
 
 if CompactUnitFrame_UpdateHealthColor then
     hooksecurefunc("CompactUnitFrame_UpdateHealthColor", function(frame)
         local unit = frame and frame.unit
-        if not unit or issecretvalue(unit) then return end
-        if tints[unit] then applyTint("blizzard", frame, tints[unit]) else followBar(unit, "blizzard", frame) end
+        if unit and not issecretvalue(unit) and tints[unit] and frame.healthBar then applyTint(frame.healthBar, tints[unit]) end
     end)
 end
 
+local function clearTint(unit, parts)
+    if not tints[unit] then return end
+    tints[unit] = nil
+    if parts and parts.blizzard and CompactUnitFrame_UpdateHealthColor then
+        pcall(CompactUnitFrame_UpdateHealthColor, parts.uf)
+    end
+end
+
+----------------------------------------------------------------------------------------------------
+-- Pool
+----------------------------------------------------------------------------------------------------
+
 local function acquire()
-    return table.remove(pool) or ns.CreateCapsule()
+    return table.remove(pool) or ns.CreateElement()
 end
 
 local function release(unit)
-    local f = active[unit]
-    if not f then return end
+    local el = active[unit]
+    if not el then return end
     active[unit] = nil
-    tints[unit] = nil
-    if f.tintOwner then restoreTint(f.tintKind, f.tintOwner) end
-    f.tintOwner, f.tintKind = nil, nil
-    f:Hide()
-    f:ClearAllPoints()
-    f:SetParent(UIParent)
-    pool[#pool + 1] = f
-end
-
--- Anchors a capsule to a bar frame. Also used by the options window's mock nameplate.
-function ns.AnchorCapsule(f, bar, parent)
-    local db = TrisThreatDB
-    local scale = db.scale
-    f:SetParent(parent or bar)
-    f:SetScale(scale)
-    f:ClearAllPoints()
-    f:SetPoint("BOTTOMLEFT", bar, "TOPLEFT", (BASE_X + db.offsetX) / scale, (BASE_Y + db.offsetY) / scale)
-end
-
-local function layout(f, plate)
-    local bar, owner, kind = findBar(plate)
-    ns.AnchorCapsule(f, bar, plate)
-    f:SetFrameStrata("HIGH")
-    f.tintOwner, f.tintKind = owner, kind
-    if owner then hookOwner(kind, owner) end
-end
-
--- color = { r, g, b }; textValue nil keeps the current text (used when only the color changes).
-function ns.PaintCapsule(f, color, textValue)
-    local c = color or ns.COLORS.unknown
-    f.fill:SetVertexColor(c[1], c[2], c[3], 1)
-    if textValue ~= nil then f.text:SetText(textValue) end
-    f:Show()
+    if el.parts then
+        clearTint(unit, el.parts)
+        if el.parts.blizzard then ns.SyncRoom(el.parts.uf, nil) end
+    end
+    el.parts = nil
+    el:Hide()
+    el:ClearAllPoints()
+    el:SetParent(UIParent)
+    pool[#pool + 1] = el
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -274,15 +206,19 @@ local function otherHolds(unit)
     return false
 end
 
-----------------------------------------------------------------------------------------------------
--- Update
-----------------------------------------------------------------------------------------------------
-
 local function safeClassification(unit)
     local value = UnitClassification and UnitClassification(unit)
     if issecretvalue(value) then return nil end
     return value
 end
+
+local function isTargetPlate(plate)
+    return plate ~= nil and plate == C_NamePlate.GetNamePlateForUnit("target")
+end
+
+----------------------------------------------------------------------------------------------------
+-- Update
+----------------------------------------------------------------------------------------------------
 
 function ns.UpdateUnit(unit)
     local db = TrisThreatDB
@@ -302,31 +238,28 @@ function ns.UpdateUnit(unit)
 
     local role = ns.GetRole()
     local offTank = status ~= false and db.offTank and role == "tank" and status < 3 and otherHolds(unit)
-    local colorKey = ns.StatusColorKey(status, role, offTank)
-    local color = ns.COLORS[colorKey] or ns.COLORS.unknown   -- fallback when no percentage can be graded
+    local color = ns.COLORS[ns.StatusColorKey(status, role, offTank)] or ns.COLORS.unknown
     local _, _, scaled = UnitDetailedThreatSituation("player", unit)
     if offTank then
         color = ns.COLORS.offtank
     elseif scaled ~= nil then
         color = curveColor(role, scaled) or color
     end
-    local text = readValue(unit, db.value, status)
 
-    local f = active[unit]
-    if not f then f = acquire(); active[unit] = f end
-    layout(f, plate)
-    if db.colorBar and f.tintOwner then
+    local el = active[unit]
+    if not el then el = acquire(); active[unit] = el end
+    local parts = getParts(plate)
+    if el.parts and el.parts.uf ~= parts.uf and el.parts.blizzard then ns.SyncRoom(el.parts.uf, nil) end
+    el.parts = parts
+    ns.Arrange(el, parts)
+    ns.PaintElement(el, color, readValue(unit, db.value, status), scaled, isTargetPlate(plate))
+
+    if db.colorBar and parts.blizzard then
         tints[unit] = color
-        applyTint(f.tintKind, f.tintOwner, color)
+        applyTint(parts.bar, color)
     else
-        if tints[unit] then
-            tints[unit] = nil
-            restoreTint(f.tintKind, f.tintOwner)
-        end
-        -- Not tinting: the capsule takes whatever color the nameplate bar shows.
-        color = readBarColor(f.tintKind, f.tintOwner) or color
+        clearTint(unit, parts)
     end
-    ns.PaintCapsule(f, color, text)
 end
 
 local function plateUnit(plate)
@@ -347,52 +280,59 @@ function ns.RefreshAll()
     for unit in pairs(active) do
         if not seen[unit] then release(unit) end
     end
-end
-
--- Re-anchors every shown capsule (options sliders).
-function ns.ApplyLayout()
-    for unit, f in pairs(active) do
-        local plate = C_NamePlate.GetNamePlateForUnit(unit)
-        if plate then layout(f, plate) end
-    end
     if preview and preview:IsShown() then ns.ShowPreview() end
 end
 
--- Test mode: a capsule on the current target, shown while the options window is open (no combat needed).
+-- Settings changed (mode, side, offsets, colors): re-place everything.
+function ns.ApplyLayout()
+    ns.RefreshAll()
+end
+
+----------------------------------------------------------------------------------------------------
+-- Test mode: an element on the current target while the options window is open (no combat needed)
+----------------------------------------------------------------------------------------------------
+
 ns.previewPercent = 70
 ns.previewOffTank = false
-local previewTint
+local previewParts, previewUnit
 
-local function clearPreviewTint()
-    if previewTint then
-        tints[previewTint.unit] = nil
-        restoreTint(previewTint.kind, previewTint.owner)
-        previewTint = nil
+local function clearPreview()
+    if previewParts then
+        if previewUnit and not active[previewUnit] then
+            clearTint(previewUnit, previewParts)
+            if previewParts.blizzard then ns.SyncRoom(previewParts.uf, nil) end
+        end
+        previewParts, previewUnit = nil, nil
     end
 end
 
 function ns.ShowPreview()
     local plate = C_NamePlate.GetNamePlateForUnit("target")
-    if not plate then ns.HidePreview(); return false end
-    preview = preview or ns.CreateCapsule()
-    layout(preview, plate)
-    clearPreviewTint()
-    local unit = plateUnit(plate)
-    local color = ns.ColorForPercent(ns.previewPercent, ns.GetRole(), ns.previewOffTank)
-    if not TrisThreatDB.colorBar then
-        color = readBarColor(preview.tintKind, preview.tintOwner) or color
+    local unit = plate and plateUnit(plate)
+    if not plate or (unit and active[unit]) then
+        -- No target, or the target already shows its real threat element.
+        clearPreview()
+        if preview then preview:Hide() end
+        return plate ~= nil
     end
-    ns.PaintCapsule(preview, color, ns.previewPercent .. "%")
-    if TrisThreatDB.colorBar and preview.tintOwner and unit and not active[unit] then
+    local parts = getParts(plate)
+    if previewParts and previewParts.uf ~= parts.uf then clearPreview() end
+    preview = preview or ns.CreateElement()
+    previewParts, previewUnit = parts, unit
+    ns.Arrange(preview, parts)
+    local color = ns.ColorForPercent(ns.previewPercent, ns.GetRole(), ns.previewOffTank)
+    ns.PaintElement(preview, color, ns.previewPercent .. "%", ns.previewPercent, true)
+    if TrisThreatDB.colorBar and parts.blizzard and unit then
         tints[unit] = color
-        previewTint = { unit = unit, kind = preview.tintKind, owner = preview.tintOwner }
-        applyTint(preview.tintKind, preview.tintOwner, color)
+        applyTint(parts.bar, color)
+    elseif unit then
+        clearTint(unit, parts)
     end
     return true
 end
 
 function ns.HidePreview()
-    clearPreviewTint()
+    clearPreview()
     if preview then preview:Hide() end
 end
 
@@ -430,6 +370,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         ns.UpdateUnit(arg1)
     elseif event == "NAME_PLATE_UNIT_REMOVED" then
         release(arg1)
+        if arg1 == previewUnit then clearPreview(); if preview then preview:Hide() end end
     elseif event == "UNIT_THREAT_LIST_UPDATE" or event == "UNIT_THREAT_SITUATION_UPDATE" then
         if type(arg1) == "string" and not issecretvalue(arg1) and arg1:find("^nameplate") then
             ns.UpdateUnit(arg1)
@@ -437,6 +378,8 @@ frame:SetScript("OnEvent", function(self, event, arg1)
             dirty = true
         end
     elseif event == "PLAYER_TARGET_CHANGED" then
+        -- Target border on the badge, and the test element follows the target while the options are open.
+        dirty = true
         if ns.previewWanted and ns.previewWanted() then
             C_Timer.After(0, ns.ShowPreview) -- the new target's plate exists one frame later
         end
