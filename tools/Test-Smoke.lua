@@ -22,6 +22,7 @@ local returns = {
     CreateTexture = function() return Stub() end,
     CreateFontString = function() return Stub() end,
     GetName = function() return nil end,
+    GetStringWidth = function() return 80 end,
 }
 -- Unknown keys return a callable stub: works both as a method (obj:Foo()) and as a child region (obj.Low:SetText()).
 function Stub(name)

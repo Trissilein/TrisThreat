@@ -47,6 +47,42 @@ local function heading(parent, text, x, y)
     return fs
 end
 
+-- Hover help for every control, keyed by the control's label.
+local TIPS = {
+    ["Mode"] = "How the threat value appears on the nameplate: as a second level badge, as a segment inside the health bar, as a thin threat bar above or below it, or as a capsule you place freely.",
+    ["Side"] = "Where the element sits. Badge: left, right, top or bottom of the health bar. Segment: left or right end of the bar. Strip: above or below the bar. Ignored by the floating capsule.",
+    ["Make room (move nameplate elements aside)"] = "Moves the nameplate's name, raid icon, elite dragon, crowd-control icons or health text aside so nothing overlaps the element. Blizzard nameplates only.",
+    ["Color the number"] = "The threat number takes the threat color (green at 0 %, red at 100 %).",
+    ["Color the background"] = "The badge or segment background takes the threat color. With a colored number as well, the background uses a darker shade so the number stays readable.",
+    ["Color the nameplate bar"] = "Tints the enemy's health bar itself with the threat color. Blizzard nameplates only.",
+    ["Number on the strip"] = "Strip mode only: shows the threat number next to the right end of the thin threat bar. Off = the bar alone.",
+    ["Off-tank color"] = "As a tank: when another tank or your pet holds the enemy, show blue instead of red.",
+    ["Role"] = "Decides the color direction. Automatic detects tanks by stance, form or aura, then by group role or specialization. As a tank, holding the enemy is green; otherwise it is red.",
+    ["Value"] = "Scaled: 100 % = you pull aggro. Raw: your share of the current tank's threat (can exceed 100 %). Lead: as a tank, your lead over the next player.",
+    ["Horizontal offset"] = "Floating capsule only: moves it left (negative) or right (positive), up to 100 pixels.",
+    ["Vertical offset"] = "Floating capsule only: moves it down (negative) or up (positive), up to 100 pixels.",
+    ["Size"] = "Floating capsule only: scales it from half to double size.",
+    ["Reset position"] = "Floating capsule only: back to the bar's top-left corner at normal size.",
+    ["Enabled"] = "Turns TrisThreat on or off.",
+    ["Only in instances"] = "Show the element only in dungeons, raids and other instances.",
+    ["Hide on trivial mobs"] = "No element on trivial or minor enemies.",
+    ["Show minimap icon"] = "Shows the TrisThreat button on the minimap. Right-click the button to hide it.",
+    ["Preview threat"] = "Try a threat value: the preview above and your current target show it, no combat needed.",
+    ["Off-tank"] = "Preview the off-tank color (blue, tanks only).",
+}
+
+local function addTooltip(widget, text)
+    local tip = TIPS[text]
+    if not (widget and tip) then return end
+    widget:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(L[text] or text, 1, 0.82, 0.2)
+        GameTooltip:AddLine(L[tip] or tip, 0.9, 0.9, 0.9, true)
+        GameTooltip:Show()
+    end)
+    widget:HookScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
 local function onLayoutChanged()
     ns.ApplyLayout()
     if ns.RefreshOptions then ns.RefreshOptions() end
@@ -58,6 +94,8 @@ local function checkbox(parent, text, x, y, key)
     check:SetSize(24, 24)
     check.label = label(parent, text)
     check.label:SetPoint("LEFT", check, "RIGHT", 2, 0)
+    check:SetHitRectInsets(0, -(check.label:GetStringWidth() + 4), 0, 0)
+    addTooltip(check, text)
     check:SetScript("OnClick", function(self)
         TrisThreatDB[key] = self:GetChecked() and true or false
         onLayoutChanged()
@@ -95,6 +133,7 @@ local function slider(parent, text, x, y, key, low, high, step)
         loading = false
     end
     s.title = fs
+    addTooltip(s, text)
     return s
 end
 
@@ -122,6 +161,8 @@ local function dropdown(parent, text, x, y, key, choices)
         end
     end)
     controls[#controls + 1] = function() UIDropDownMenu_SetText(dd, textOf(TrisThreatDB[key])) end
+    addTooltip(dd, text)
+    if dd.Button then addTooltip(dd.Button, text) end
     return dd
 end
 
@@ -292,6 +333,7 @@ local function build()
     previewSlider:SetValue(ns.previewPercent)
     if previewSlider.Low then previewSlider.Low:SetText("") end
     if previewSlider.High then previewSlider.High:SetText("") end
+    addTooltip(previewSlider, "Preview threat")
     previewSlider:SetScript("OnValueChanged", function(_, value)
         ns.previewPercent = math.floor(value + 0.5)
         ns.RefreshMock()
@@ -303,6 +345,7 @@ local function build()
     off:SetSize(24, 24)
     off:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2 + 176, y + 5)
     label(frame, "Off-tank"):SetPoint("LEFT", off, "RIGHT", 2, 0)
+    addTooltip(off, "Off-tank")
     off:SetScript("OnClick", function(self)
         ns.previewOffTank = self:GetChecked() and true or false
         ns.RefreshMock()
@@ -359,6 +402,7 @@ local function build()
     reset:SetSize(140, 22)
     reset:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2, yr)
     reset:SetText(L["Reset position"])
+    addTooltip(reset, "Reset position")
     reset:SetScript("OnClick", function()
         TrisThreatDB.offsetX, TrisThreatDB.offsetY, TrisThreatDB.scale = 0, 0, 1
         onLayoutChanged()
@@ -375,6 +419,7 @@ local function build()
     mini:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2 + 148, yr)
     mini:SetSize(24, 24)
     label(frame, "Show minimap icon"):SetPoint("LEFT", mini, "RIGHT", 2, 0)
+    addTooltip(mini, "Show minimap icon")
     mini:SetScript("OnClick", function(self)
         TrisThreatDB.minimap.hide = not self:GetChecked()
         if ns.ApplyMinimap then ns.ApplyMinimap() end
