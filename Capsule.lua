@@ -199,6 +199,30 @@ local function holds(tankUnit, unit)
     return status ~= nil and not issecretvalue(status) and status == 3
 end
 
+-- Is anybody besides the player (group members, their pets, your pet) on the mob's threat list?
+local function onList(other, unit)
+    if not UnitExists(other) then return false end
+    local status = UnitThreatSituation(other, unit)
+    if status == nil then return false end
+    return true -- a secret status still means "on the list"
+end
+
+function ns.OthersOnThreatList(unit)
+    if onList("pet", unit) then return true end
+    local prefix, count
+    if IsInRaid and IsInRaid() then prefix, count = "raid", GetNumGroupMembers()
+    elseif IsInGroup and IsInGroup() then prefix, count = "party", GetNumSubgroupMembers()
+    else return false end
+    for index = 1, count do
+        local member = prefix .. index
+        local same = UnitIsUnit(member, "player")
+        if same == nil or issecretvalue(same) or not same then
+            if onList(member, unit) or onList(prefix .. "pet" .. index, unit) then return true end
+        end
+    end
+    return false
+end
+
 -- Another tank (assigned role TANK) or your own pet holds the mob.
 local function otherHolds(unit)
     if holds("pet", unit) then return true end
@@ -261,9 +285,10 @@ function ns.UpdateUnit(unit)
         local lead = UnitThreatPercentageOfLead("player", unit)
         -- Alone on the threat list there is no next player: a readable 0 means "all yours", so full and green.
         if lead ~= nil and not issecretvalue(lead) and lead <= 0 then lead = 200 end
-        -- Solo without a pet nobody else can be on the list. The lead is then a secret 0 (no next player),
-        -- which would show an empty bar: show the truth instead, all yours, full and green.
-        local alone = not (IsInGroup and IsInGroup()) and not UnitExists("pet")
+        -- Nobody else on the threat list (solo, or the group has not touched it yet): the lead is then a secret 0
+        -- (no next player), which would show an empty bar. The threat status of the others is readable, so
+        -- check it: if none of them is on the list, it is all yours, full and green.
+        local alone = not ns.OthersOnThreatList(unit)
         if alone then
             fill, low, high = 1, 0, 1
             color = ns.COLORS.good
