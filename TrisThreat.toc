@@ -5,6 +5,8 @@
 ## Author: Ingo
 ## Version: 0.1.0
 ## IconTexture: Interface\AddOns\TrisThreat\Assets\TrisThreatIcon.tga
+## X-Wago-ID: jK8Wpe6y
+## X-Curse-Project-ID: 1798760
 ## SavedVariables: TrisThreatDB
 ## OptionalDeps: LibStub, CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon-1.0
 ## AddonCompartmentFunc: TrisThreat_OnAddonCompartmentClick
