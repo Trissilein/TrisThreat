@@ -179,6 +179,46 @@ function ns.PaintCapsule(f, color, textValue)
 end
 
 ----------------------------------------------------------------------------------------------------
+-- Gradient: a color curve evaluated by the engine, so a secret percentage still gives a color
+----------------------------------------------------------------------------------------------------
+
+local curves = {}   -- "dps" | "tank" -> color curve (false = unavailable)
+
+local function buildCurve(tank)
+    if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return false end
+    local ok, curve = pcall(C_CurveUtil.CreateColorCurve)
+    if not ok or not curve then return false end
+    pcall(function()
+        if curve.SetType and Enum and Enum.LuaCurveType then curve:SetType(Enum.LuaCurveType.Linear) end
+        for _, stop in ipairs(ns.GRADIENT_STOPS) do
+            local c = ns.GradientColor(tank and (100 - stop[1]) or stop[1], false)
+            curve:AddPoint(stop[1], CreateColor(c[1], c[2], c[3], 1))
+        end
+    end)
+    return curve
+end
+
+-- Returns { r, g, b } (the numbers may be secret values) or nil when the curve cannot be evaluated.
+local function curveColor(role, value)
+    if value == nil then return nil end
+    local key = role == "tank" and "tank" or "dps"
+    if curves[key] == nil then curves[key] = buildCurve(key == "tank") end
+    local curve = curves[key]
+    if not curve then return nil end
+    local ok, color = pcall(curve.Evaluate, curve, value)
+    if not ok or not color then return nil end
+    local ok2, r, g, b = pcall(color.GetRGB, color)
+    if not ok2 or r == nil then return nil end
+    return { r, g, b }
+end
+
+-- Used by /tt probe.
+function ns.ProbeCurve(value)
+    local color = curveColor("dps", value)
+    return color ~= nil, color
+end
+
+----------------------------------------------------------------------------------------------------
 -- Threat reading (every API result is checked for secret values before it is compared)
 ----------------------------------------------------------------------------------------------------
 
@@ -260,7 +300,13 @@ function ns.UpdateUnit(unit)
     local role = ns.GetRole()
     local offTank = status ~= false and db.offTank and role == "tank" and status < 3 and otherHolds(unit)
     local colorKey = ns.StatusColorKey(status, role, offTank)
-    local color = ns.COLORS[colorKey] or ns.COLORS.unknown
+    local color = ns.COLORS[colorKey] or ns.COLORS.unknown   -- fallback when no percentage can be graded
+    local _, _, scaled = UnitDetailedThreatSituation("player", unit)
+    if offTank then
+        color = ns.COLORS.offtank
+    elseif scaled ~= nil then
+        color = curveColor(role, scaled) or color
+    end
     local text = readValue(unit, db.value, status)
 
     local f = active[unit]
@@ -310,7 +356,8 @@ function ns.ApplyLayout()
 end
 
 -- Test mode: a capsule on the current target, shown while the options window is open (no combat needed).
-ns.previewState = "good"
+ns.previewPercent = 70
+ns.previewOffTank = false
 local previewTint
 
 local function clearPreviewTint()
@@ -328,11 +375,11 @@ function ns.ShowPreview()
     layout(preview, plate)
     clearPreviewTint()
     local unit = plateUnit(plate)
-    local color = ns.COLORS[ns.previewState]
+    local color = ns.ColorForPercent(ns.previewPercent, ns.GetRole(), ns.previewOffTank)
     if not TrisThreatDB.colorBar then
         color = readBarColor(preview.tintKind, preview.tintOwner) or color
     end
-    ns.PaintCapsule(preview, color, "70%")
+    ns.PaintCapsule(preview, color, ns.previewPercent .. "%")
     if TrisThreatDB.colorBar and preview.tintOwner and unit and not active[unit] then
         tints[unit] = color
         previewTint = { unit = unit, kind = preview.tintKind, owner = preview.tintOwner }

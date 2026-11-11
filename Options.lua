@@ -123,11 +123,11 @@ local function refreshMock()
     -- The in-world capsule uses the HIGH strata, which sits below this DIALOG window: lift it into the preview.
     mock.capsule:SetFrameStrata("DIALOG")
     mock.capsule:SetFrameLevel(mock.panel:GetFrameLevel() + 10)
-    local state = ns.previewState
-    local c = db.colorBar and ns.COLORS[state] or { 0.78, 0.12, 0.12 }
-    mock.bar:SetStatusBarColor(c[1], c[2], c[3])
-    ns.PaintCapsule(mock.capsule, c, "70%")
-    for key, button in pairs(mock.states) do button.selected:SetShown(key == state) end
+    local c = ns.ColorForPercent(ns.previewPercent, ns.GetRole(), ns.previewOffTank)
+    local barColor = db.colorBar and c or { 0.78, 0.12, 0.12 }
+    mock.bar:SetStatusBarColor(barColor[1], barColor[2], barColor[3])
+    ns.PaintCapsule(mock.capsule, c, ns.previewPercent .. "%")
+    mock.percentText:SetText(ns.previewPercent .. "%")
 end
 
 local function onLayoutChanged()
@@ -161,32 +161,37 @@ local function buildMock(parent, y)
     bar:SetMinMaxValues(0, 100)
     bar:SetValue(64)
     local capsule = ns.CreateCapsule()
-    mock = { panel = panel, bar = bar, capsule = capsule, states = {} }
+    mock = { panel = panel, bar = bar, capsule = capsule }
 
-    -- State buttons double as the legend: click one to preview that threat state here and on your target.
-    local x = 8
-    for _, entry in ipairs({ { "good", "Good" }, { "warn", "Careful" }, { "bad", "Bad" }, { "offtank", "Off-tank" } }) do
-        local button = CreateFrame("Button", nil, panel)
-        button:SetSize(86, 16)
-        button:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", x, 6)
-        local fill = button:CreateTexture(nil, "ARTWORK")
-        fill:SetPoint("LEFT")
-        fill:SetSize(12, 12)
-        fill:SetColorTexture(unpack(ns.COLORS[entry[1]]))
-        local text = label(button, entry[2], "GameFontNormalSmall")
-        text:SetPoint("LEFT", fill, "RIGHT", 4, 0)
-        button.selected = button:CreateTexture(nil, "BACKGROUND")
-        button.selected:SetPoint("TOPLEFT", fill, "TOPLEFT", -2, 2)
-        button.selected:SetPoint("BOTTOMRIGHT", fill, "BOTTOMRIGHT", 2, -2)
-        button.selected:SetColorTexture(1, 1, 1, 0.9)
-        button:SetScript("OnClick", function()
-            ns.previewState = entry[1]
-            refreshMock()
-            ns.ShowPreview()
-        end)
-        mock.states[entry[1]] = button
-        x = x + 92
-    end
+    -- Preview threat: the slider drives this mock and your target's capsule (no combat needed).
+    local previewLabel = label(panel, "Preview threat", "GameFontNormalSmall")
+    previewLabel:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 10, 10)
+    local slider = CreateFrame("Slider", nil, panel, "OptionsSliderTemplate")
+    slider:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 110, 10)
+    slider:SetSize(190, 16)
+    slider:SetMinMaxValues(0, 100)
+    slider:SetValueStep(1)
+    slider:SetObeyStepOnDrag(true)
+    slider:SetValue(ns.previewPercent)
+    if slider.Low then slider.Low:SetText("") end
+    if slider.High then slider.High:SetText("") end
+    slider:SetScript("OnValueChanged", function(_, value)
+        ns.previewPercent = math.floor(value + 0.5)
+        refreshMock()
+        ns.ShowPreview()
+    end)
+    mock.percentText = label(panel, "", "GameFontNormalSmall")
+    mock.percentText:SetPoint("LEFT", slider, "RIGHT", 8, 0)
+    local off = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    off:SetSize(20, 20)
+    off:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -62, 8)
+    local offLabel = label(panel, "Off-tank", "GameFontNormalSmall")
+    offLabel:SetPoint("LEFT", off, "RIGHT", 2, 0)
+    off:SetScript("OnClick", function(self)
+        ns.previewOffTank = self:GetChecked() and true or false
+        refreshMock()
+        ns.ShowPreview()
+    end)
     return panel
 end
 
@@ -281,7 +286,7 @@ local function build()
     checkbox(frame, "Hide on trivial mobs", y, "hideTrivial"); y = y - 26
     checkbox(frame, "Off-tank color", y, "offTank"); y = y - 28
 
-    local legend = label(frame, "As tank: green = you hold it. As damage dealer or healer: red = you pulled it.", "GameFontNormalSmall")
+    local legend = label(frame, "Green at 0 % threat, red at 100 %. As a tank the scale is mirrored: 100 % (you hold it) is green.", "GameFontNormalSmall")
     legend:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, y)
     legend:SetPoint("RIGHT", frame, "RIGHT", -18, 0)
     legend:SetJustifyH("LEFT")
@@ -325,4 +330,17 @@ end
 
 SLASH_TRISTHREAT1 = "/tristhreat"
 SLASH_TRISTHREAT2 = "/tt"
-SlashCmdList["TRISTHREAT"] = function() ns.ToggleOptions() end
+SlashCmdList["TRISTHREAT"] = function(message)
+    if (message or ""):lower():match("^%s*probe") then
+        local ok = ns.ProbeCurve(70)
+        print("|cffe0ad3dTrisThreat|r probe: color curve " .. (ok and "works for plain numbers" or "NOT available"))
+        if UnitExists("target") then
+            local _, _, scaled = UnitDetailedThreatSituation("player", "target")
+            local okTarget, color = ns.ProbeCurve(scaled)
+            print("|cffe0ad3dTrisThreat|r probe: target threat " .. (scaled == nil and "none" or "read")
+                .. ", curve " .. (okTarget and "OK" or "FAILED") .. (color and "" or ""))
+        end
+        return
+    end
+    ns.ToggleOptions()
+end

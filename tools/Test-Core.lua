@@ -54,3 +54,17 @@ d.onlyInstances = true
 check("instances only", not ns.ShouldShow(d, "normal", false) and ns.ShouldShow(d, "normal", true))
 d.enabled = false
 check("disabled hides all", not ns.ShouldShow(d, "normal", true))
+
+-- Gradient: green at 0 %, red at 100 %, mirrored for tanks, clamped
+local function near(a, b) return math.abs(a - b) < 0.001 end
+local g0, g50, g100 = ns.GradientColor(0, false), ns.GradientColor(50, false), ns.GradientColor(100, false)
+check("dps gradient endpoints", near(g0[2], 0.85) and near(g0[1], 0.18) and near(g100[1], 0.90) and near(g100[2], 0.15))
+check("dps gradient midpoint is yellow", near(g50[1], 0.97) and near(g50[2], 0.82))
+local t0, t100 = ns.GradientColor(0, true), ns.GradientColor(100, true)
+check("tank gradient is mirrored", near(t0[1], 0.90) and near(t100[2], 0.85))
+local q = ns.GradientColor(25, false)
+check("per-percent interpolation", q[1] > g0[1] and q[1] < g50[1] and q[2] < g0[2] and q[2] > g50[2])
+check("gradient clamps and tolerates junk", near(ns.GradientColor(250, false)[1], 0.90) and near(ns.GradientColor(-5, false)[2], 0.85)
+    and ns.GradientColor("x", false)[1] ~= nil)
+check("off-tank color beats the gradient for tanks only", ns.ColorForPercent(10, "tank", true) == ns.COLORS.offtank
+    and ns.ColorForPercent(10, "damage", true) ~= ns.COLORS.offtank)

@@ -43,3 +43,6 @@ L["Target an enemy first."] = "Wähle zuerst einen Gegner als Ziel."
 L["Nameplate offsets in pixels. Positive values move the capsule right and up."] =
     "Namensplaketten-Versatz in Pixeln. Positive Werte verschieben die Kapsel nach rechts und oben."
 L["Close"] = "Schließen"
+L["Preview threat"] = "Vorschau Threat"
+L["Green at 0 % threat, red at 100 %. As a tank the scale is mirrored: 100 % (you hold it) is green."] =
+    "Grün bei 0 % Threat, rot bei 100 %. Für Tanks gespiegelt: 100 % (du hältst es) ist grün."

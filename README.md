@@ -11,7 +11,7 @@ Retail compatibility: **12.1.5** (interface **120105**). WoW Forever compatibili
 ## What it does
 
 - A capsule on each enemy nameplate that fights you, with the threat value (for example `70%`). It grows out of the health bar like a tab and shares its color.
-- The color depends on your role. As a tank, green means you hold the enemy and red means you lost it. As a damage dealer or healer, green is safe, orange is rising and red means you pulled it.
+- The color grades continuously with your threat, one step per percent: green at 0 %, yellow at 50 %, red at 100 %. As a tank the scale is mirrored, so 100 % (you hold the enemy) is green.
 - Role detection is automatic (stance, form or aura of a tank, then the assigned group role, then your specialization role) and can be overridden in the settings.
 - When another tank or your pet holds the enemy, the capsule turns blue instead of red (tank only).
 - Position the capsule up to 100 pixels left, right, up and down from the nameplate's top-left corner; size is adjustable. A preview button shows it on your target.

@@ -111,6 +111,40 @@ ns.COLORS = {
     unknown = { 0.6, 0.6, 0.6 },
 }
 
+-- Continuous grading: green at 0 %, yellow at 50 %, red at 100 %. A tank sees it mirrored (100 % = holding = green).
+ns.GRADIENT_STOPS = {
+    { 0, { 0.18, 0.85, 0.30 } },
+    { 50, { 0.97, 0.82, 0.16 } },
+    { 100, { 0.90, 0.15, 0.15 } },
+}
+
+-- Plain-number version (options preview, tests, fallback). The in-game path evaluates the same stops on a color
+-- curve so secret percentages work too.
+function ns.GradientColor(percent, tank)
+    local value = tonumber(percent) or 0
+    value = math.max(0, math.min(100, value))
+    if tank then value = 100 - value end
+    local stops = ns.GRADIENT_STOPS
+    for i = 2, #stops do
+        local a, b = stops[i - 1], stops[i]
+        if value <= b[1] then
+            local t = (value - a[1]) / (b[1] - a[1])
+            return {
+                a[2][1] + (b[2][1] - a[2][1]) * t,
+                a[2][2] + (b[2][2] - a[2][2]) * t,
+                a[2][3] + (b[2][3] - a[2][3]) * t,
+            }
+        end
+    end
+    return stops[#stops][2]
+end
+
+-- Color for a readable percentage; a co-tank or pet holding the mob wins (tank only).
+function ns.ColorForPercent(percent, role, offTank)
+    if offTank and role == "tank" then return ns.COLORS.offtank end
+    return ns.GradientColor(percent, role == "tank")
+end
+
 -- status: UnitThreatSituation 0..3, nil = not on the threat list (hidden), false = unreadable (secret).
 -- Returns the color key or nil when nothing should be shown.
 function ns.StatusColorKey(status, role, offTank)
