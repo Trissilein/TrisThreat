@@ -69,7 +69,8 @@ local function slider(parent, text, y, key, low, high, step, onChange)
     s:SetMinMaxValues(low, high)
     s:SetValueStep(step)
     s:SetObeyStepOnDrag(true)
-    s.Low:SetText(tostring(low)); s.High:SetText(tostring(high))
+    if s.Low then s.Low:SetText(tostring(low)) end
+    if s.High then s.High:SetText(tostring(high)) end
     local loading = false
     s:SetScript("OnValueChanged", function(self, value)
         if loading then return end
