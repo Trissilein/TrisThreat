@@ -125,3 +125,13 @@ check("shield, another tank in the group: damage", role == "damage" and why == "
 role, why = ns.ResolveRole(apiO("TANK", true, true))
 check("own TANK role wins over another tank", role == "tank" and why == "groupTank")
 check("every reason has a text", ns.ROLE_REASONS[why] ~= nil and ns.ROLE_REASONS.default ~= nil)
+
+-- Holy paladin with a shield
+local function apiH(group, shield, lean, other)
+    return { groupRole = function() return group end, shieldTank = function() return shield end,
+        talentLean = function() return lean end, otherTank = function() return other end }
+end
+role, why = ns.ResolveRole(apiH("DAMAGER", true, "healer", false))
+check("shield with mostly Holy talents heals", role == "healer" and why == "shieldHoly")
+check("talent lean needs 5 more Holy points", ns.TalentLean("PALADIN", 10, 6) == nil and ns.TalentLean("PALADIN", 11, 6) == "healer"
+    and ns.TalentLean("WARRIOR", 30, 0) == nil and ns.TalentLean("PALADIN", nil, 3) == nil)

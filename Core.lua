@@ -75,12 +75,14 @@ end
 -- secret, which counts as "unknown".
 --   1. Group role TANK or HEALER (a deliberate choice) wins.
 --   2. Tank form, stance or aura (Bear Form; on Forever not used for Warriors/Paladins, see shieldTank).
---   3. Shield (Forever, Warrior/Paladin): tank, unless another tank is in the group, then damage dealer.
+--   3. Shield (Forever, Warrior/Paladin): a Paladin with clearly more Holy than Protection talents heals;
+--      otherwise tank, unless another tank is in the group, then damage dealer.
 --      The DAMAGER group role does not override this: a party without a role check gives everybody DAMAGER.
 --   4. Group role DAMAGER, then specialization role (Retail), else damage dealer.
 ns.ROLE_REASONS = {
     groupTank = "group role", groupHealer = "group role", aura = "tank form or stance",
     shield = "shield, no other tank", shieldOtherTank = "shield, another tank in the group",
+    shieldHoly = "shield, mostly Holy talents",
     groupDamage = "group role", specTank = "specialization", specHealer = "specialization", default = "no tank signal",
 }
 
@@ -96,6 +98,7 @@ function ns.ResolveRole(api)
     if group == "HEALER" then return "healer", "groupHealer" end
     if read(api.tankAura) == true then return "tank", "aura" end
     if read(api.shieldTank) == true then
+        if read(api.talentLean) == "healer" then return "healer", "shieldHoly" end
         if read(api.otherTank) == true then return "damage", "shieldOtherTank" end
         return "tank", "shield"
     end
@@ -118,7 +121,11 @@ local function otherTankInGroup()
         if same ~= nil and not issecretvalue(same) and not same and UnitExists(member) then
             local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(member)
             if role == "TANK" then return true end
-            if UnitHasEffectivelyTankAura then
+            local _, class = UnitClass(member)
+            local shieldClass = not GetSpecialization and (class == "WARRIOR" or class == "PALADIN")
+            -- Bear Form and the like count; on Forever a Warrior's or Paladin's aura does not (their shield
+            -- decides, and other players' gear is not readable without inspecting them).
+            if UnitHasEffectivelyTankAura and not shieldClass then
                 local ok, tank = pcall(UnitHasEffectivelyTankAura, member)
                 if ok and tank == true then return true end
             end
@@ -127,6 +134,25 @@ local function otherTankInGroup()
     return false
 end
 ns.OtherTankInGroup = otherTankInGroup
+
+-- Points spent in one talent tab across client versions (Classic: name, icon, pointsSpent, fileName;
+-- later: id, name, description, icon, pointsSpent, ...). nil when the client has no tabbed talents.
+local function tabPoints(tab)
+    if not GetTalentTabInfo then return nil end
+    local ok, a, b, c, d, e = pcall(GetTalentTabInfo, tab)
+    if not ok then return nil end
+    if type(c) == "number" and type(a) == "string" then return c end
+    if type(e) == "number" then return e end
+    return nil
+end
+
+-- "healer" when a Paladin has clearly more points in Holy than in Protection (5 or more), else nil.
+-- Early levels spread points evenly, so a small difference decides nothing.
+function ns.TalentLean(class, holy, protection)
+    if class ~= "PALADIN" or type(holy) ~= "number" or type(protection) ~= "number" then return nil end
+    if holy >= protection + 5 then return "healer" end
+    return nil
+end
 
 function ns.DetectRole()
     return ns.ResolveRole({
@@ -142,6 +168,10 @@ function ns.DetectRole()
         end,
         groupRole = function() return UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") end,
         otherTank = otherTankInGroup,
+        talentLean = function()
+            local _, class = UnitClass("player")
+            return ns.TalentLean(class, tabPoints(1), tabPoints(2))
+        end,
         -- Forever has no real specializations: a Warrior or Paladin with a shield is a tank unless the group
         -- role says otherwise. Shamans carry shields in every role, so they are left out. Retail uses the spec.
         shieldTank = function()
