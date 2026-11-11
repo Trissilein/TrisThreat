@@ -59,7 +59,14 @@ function ns.Arrange(el, parts)
     ns.PlaceElement(el, parts, spec)
     if parts.blizzard or parts.mock then
         if parts.blizzard then hookLayout(parts.uf) end
-        ns.SyncRoom(parts.uf, (db.makeRoom and mode ~= "floating") and spec.room or nil)
+        local makeRoom = db.makeRoom and mode ~= "floating"
+        ns.SyncRoom(parts.uf, makeRoom and spec.room or nil)
+        -- Other addons' icons (quest markers ...) under a badge or strip move outward as well.
+        if parts.blizzard and makeRoom and (mode == "badge" or mode == "strip") then
+            ns.PushForeign(el, parts, ns.EffectiveSide(mode, db.side))
+        else
+            ns.ReleaseForeign(el)
+        end
     end
     return spec
 end
@@ -99,6 +106,7 @@ local function release(unit)
     local el = active[unit]
     if not el then return end
     active[unit] = nil
+    ns.ReleaseForeign(el)
     if el.parts then
         clearTint(unit, el.parts)
         if el.parts.blizzard then ns.SyncRoom(el.parts.uf, nil) end
@@ -317,6 +325,7 @@ local previewParts, previewUnit
 
 local function clearPreview()
     if previewParts then
+        if preview then ns.ReleaseForeign(preview) end
         if previewUnit and not active[previewUnit] then
             clearTint(previewUnit, previewParts)
             if previewParts.blizzard then ns.SyncRoom(previewParts.uf, nil) end

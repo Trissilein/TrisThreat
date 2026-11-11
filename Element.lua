@@ -44,6 +44,7 @@ ns.SetNameplateFont = setFont
 
 function ns.CreateElement()
     local el = CreateFrame("Frame", nil, UIParent)
+    el.trisThreatElement = true
     el.bg = el:CreateTexture(nil, "BACKGROUND")
     el.fill = CreateFrame("StatusBar", nil, el)
     el.fill:SetMinMaxValues(0, 100)
@@ -242,4 +243,73 @@ end
 function ns.RoomWasReset(uf)
     uf.trisThreatRoom = nil
     if uf.trisThreatDesired then ns.SyncRoom(uf, uf.trisThreatDesired) end
+end
+
+----------------------------------------------------------------------------------------------------
+-- Make room for other addons' icons (quest markers and the like) that sit where the element now is.
+-- Only small, visible frames of the nameplate that overlap the element are pushed outward by exactly the
+-- overlap; the shift is undone before every re-placement and when the element goes away. When the other
+-- addon re-anchors its icon by itself, the stored offset no longer matches and the undo is skipped.
+----------------------------------------------------------------------------------------------------
+
+local BLIZZARD_KEYS = { "HealthBarsContainer", "CastBarsContainer", "AurasFrame", "PlayerLevelDiffFrame",
+    "RaidTargetFrame", "ClassificationFrame", "LevelFrame", "SoftTargetFrame", "name", "selectionHighlight" }
+
+local function screenRect(frame)
+    local ok, left, bottom, width, height = pcall(frame.GetRect, frame)
+    if not ok or type(left) ~= "number" or type(width) ~= "number" then return nil end
+    if issecretvalue and (issecretvalue(left) or issecretvalue(width)) then return nil end
+    local scale = frame:GetEffectiveScale()
+    return left * scale, (left + width) * scale, (bottom + height) * scale, bottom * scale, width, height
+end
+
+local function firstOffset(frame)
+    local ok, _, _, _, x, y = pcall(frame.GetPoint, frame, 1)
+    if ok then return x, y end
+end
+
+function ns.ReleaseForeign(el)
+    for _, moved in ipairs(el.movedForeign or {}) do
+        local x, y = firstOffset(moved.frame)
+        if x == moved.x and y == moved.y then pcall(moved.frame.AdjustPointsOffset, moved.frame, -moved.dx, -moved.dy) end
+    end
+    el.movedForeign = nil
+end
+
+-- side: "left" | "right" | "top" | "bottom" (the direction to push).
+function ns.PushForeign(el, parts, side)
+    ns.ReleaseForeign(el)
+    local L, R, T, B = screenRect(el)
+    if not L then return end
+    local gap = 2 * el:GetEffectiveScale()
+    local skip = { [el] = true, [parts.uf] = true }
+    for _, key in ipairs(BLIZZARD_KEYS) do
+        local region = parts.uf[key]
+        if type(region) == "table" then skip[region] = true end
+    end
+    local moved = {}
+    local function consider(frame)
+        if skip[frame] or frame.trisThreatElement or not frame.IsVisible or not frame:IsVisible() then return end
+        if not frame.AdjustPointsOffset then return end
+        local l, r, t, b, w, h = screenRect(frame)
+        if not l or w > 64 or h > 64 then return end -- icons only, never whole bars or containers
+        if r <= L or l >= R or t <= B or b >= T then return end
+        local dx, dy = 0, 0
+        if side == "left" then dx = (L - gap) - r
+        elseif side == "right" then dx = (R + gap) - l
+        elseif side == "top" then dy = (T + gap) - b
+        else dy = (B - gap) - t end
+        local scale = frame:GetEffectiveScale()
+        dx, dy = dx / scale, dy / scale
+        if pcall(frame.AdjustPointsOffset, frame, dx, dy) then
+            local x, y = firstOffset(frame)
+            moved[#moved + 1] = { frame = frame, dx = dx, dy = dy, x = x, y = y }
+        end
+    end
+    for _, child in ipairs({ parts.uf:GetChildren() }) do consider(child) end
+    local plate = parts.uf:GetParent()
+    if plate and plate ~= UIParent then
+        for _, child in ipairs({ plate:GetChildren() }) do consider(child) end
+    end
+    el.movedForeign = moved
 end
