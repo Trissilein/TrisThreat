@@ -110,3 +110,5 @@ end
 check("shield makes a solo warrior or paladin a tank", ns.ResolveRole(apiS(false, "NONE", true, "DAMAGER")) == "tank")
 check("group role healer beats the shield", ns.ResolveRole(apiS(false, "HEALER", true, nil)) == "healer")
 check("no shield falls through to spec", ns.ResolveRole(apiS(false, "NONE", false, "DAMAGER")) == "damage")
+
+check("shield beats the default DAMAGER party role", ns.ResolveRole(apiS(false, "DAMAGER", true, nil)) == "tank")

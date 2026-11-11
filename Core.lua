@@ -82,8 +82,9 @@ function ns.ResolveRole(api)
     local group = read(api.groupRole)
     if group == "TANK" then return "tank" end
     if group == "HEALER" then return "healer" end
-    if group == "DAMAGER" then return "damage" end
+    -- A shield beats the DAMAGER group role: a party without the role check gives everybody DAMAGER.
     if read(api.shieldTank) == true then return "tank" end
+    if group == "DAMAGER" then return "damage" end
     local spec = read(api.specRole)
     if spec == "TANK" then return "tank" end
     if spec == "HEALER" then return "healer" end
