@@ -70,8 +70,7 @@ end
 ----------------------------------------------------------------------------------------------------
 
 -- api = { tankAura(), groupRole(), specRole() } each returning a value or nil (any may be secret or missing).
--- Order: effective tank (stance, form, aura) -> assigned group role -> spec role -> damage.
--- The offhand shield is deliberately not a signal: Holy Paladins and Restoration Shamans carry one too.
+-- Order: effective tank (stance, form, aura) -> assigned group role -> shield (Forever only) -> spec role -> damage.
 function ns.ResolveRole(api)
     local function read(fn)
         if type(fn) ~= "function" then return nil end
@@ -84,6 +83,7 @@ function ns.ResolveRole(api)
     if group == "TANK" then return "tank" end
     if group == "HEALER" then return "healer" end
     if group == "DAMAGER" then return "damage" end
+    if read(api.shieldTank) == true then return "tank" end
     local spec = read(api.specRole)
     if spec == "TANK" then return "tank" end
     if spec == "HEALER" then return "healer" end
@@ -97,6 +97,19 @@ function ns.DetectRole()
             if PlayerUtil and PlayerUtil.IsPlayerEffectivelyTank then return PlayerUtil.IsPlayerEffectivelyTank() end
         end,
         groupRole = function() return UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") end,
+        -- Forever has no real specializations: a Warrior or Paladin with a shield is a tank unless the group
+        -- role says otherwise. Shamans carry shields in every role, so they are left out. Retail uses the spec.
+        shieldTank = function()
+            if GetSpecialization then return nil end
+            local _, class = UnitClass("player")
+            if class ~= "WARRIOR" and class ~= "PALADIN" then return false end
+            local itemID = GetInventoryItemID and GetInventoryItemID("player", 17)
+            if not itemID then return false end
+            local getInfo = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+            if not getInfo then return false end
+            local _, _, _, _, _, classID, subclassID = getInfo(itemID)
+            return classID == 4 and subclassID == 6 -- Armor / Shield, independent of the client language
+        end,
         specRole = function()
             local getSpec = GetSpecialization or (C_SpecializationInfo and C_SpecializationInfo.GetSpecialization)
             if getSpec and GetSpecializationRole then return GetSpecializationRole(getSpec()) end

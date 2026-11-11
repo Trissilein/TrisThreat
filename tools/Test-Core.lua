@@ -99,3 +99,12 @@ check("floating uses offsets and scale", fl.scale == 2 and fl.points[1][4] == 10
 check("lead 100 is red", near(ns.LeadColor(100)[1], 0.90) and near(ns.LeadColor(100)[2], 0.15))
 check("lead 150 is yellow", near(ns.LeadColor(150)[1], 0.97))
 check("lead 200+ is green", near(ns.LeadColor(200)[2], 0.85) and near(ns.LeadColor(400)[2], 0.85))
+
+-- Shield (Forever): tank unless the group role says otherwise; spec comes after it
+local function apiS(tank, group, shield, spec)
+    return { tankAura = function() return tank end, groupRole = function() return group end,
+        shieldTank = function() return shield end, specRole = function() return spec end }
+end
+check("shield makes a solo warrior or paladin a tank", ns.ResolveRole(apiS(false, "NONE", true, "DAMAGER")) == "tank")
+check("group role healer beats the shield", ns.ResolveRole(apiS(false, "HEALER", true, nil)) == "healer")
+check("no shield falls through to spec", ns.ResolveRole(apiS(false, "NONE", false, "DAMAGER")) == "damage")
