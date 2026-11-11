@@ -297,6 +297,8 @@ local function build()
     frame:SetScale(math.min(1, (UIParent:GetHeight() - 40) / HEIGHT, (UIParent:GetWidth() - 40) / WIDTH))
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
+    -- Raises above other addon windows (WoWraVox ...) when clicked, and drops behind them when they are.
+    frame:SetToplevel(true)
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
     frame:SetMovable(true)

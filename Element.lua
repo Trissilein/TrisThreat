@@ -135,7 +135,9 @@ function ns.PlaceElement(el, parts, spec)
     local parent = parts.uf
     el:SetParent(parent)
     el:SetFrameStrata(parent:GetFrameStrata())
-    el:SetFrameLevel(parent:GetFrameLevel() + 60) -- above Blizzard's level badge (frameLevel 50)
+    -- In the world: above Blizzard's level badge (frameLevel 50). In the options preview only a few levels
+    -- above the mock, so it never pokes through other windows of the same strata.
+    el:SetFrameLevel(parent:GetFrameLevel() + (parts.mock and 5 or 60))
     el:SetScale(spec.scale or 1)
     el:ClearAllPoints()
     if #spec.points == 1 then el:SetSize(spec.w, spec.h) else el:SetHeight(spec.h) end
