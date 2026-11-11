@@ -112,3 +112,16 @@ check("group role healer beats the shield", ns.ResolveRole(apiS(false, "HEALER",
 check("no shield falls through to spec", ns.ResolveRole(apiS(false, "NONE", false, "DAMAGER")) == "damage")
 
 check("shield beats the default DAMAGER party role", ns.ResolveRole(apiS(false, "DAMAGER", true, nil)) == "tank")
+
+-- Shield and another tank in the group
+local function apiO(group, shield, other)
+    return { groupRole = function() return group end, shieldTank = function() return shield end,
+        otherTank = function() return other end }
+end
+local role, why = ns.ResolveRole(apiO("DAMAGER", true, false))
+check("shield, no other tank: tank", role == "tank" and why == "shield")
+role, why = ns.ResolveRole(apiO("DAMAGER", true, true))
+check("shield, another tank in the group: damage", role == "damage" and why == "shieldOtherTank")
+role, why = ns.ResolveRole(apiO("TANK", true, true))
+check("own TANK role wins over another tank", role == "tank" and why == "groupTank")
+check("every reason has a text", ns.ROLE_REASONS[why] ~= nil and ns.ROLE_REASONS.default ~= nil)

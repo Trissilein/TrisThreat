@@ -69,8 +69,21 @@ end
 -- Role
 ----------------------------------------------------------------------------------------------------
 
--- api = { tankAura(), groupRole(), specRole() } each returning a value or nil (any may be secret or missing).
--- Order: effective tank (stance, form, aura) -> assigned group role -> shield (Forever only) -> spec role -> damage.
+-- Role resolution as explicit rules, first match wins. Returns role and the reason (shown in the tooltip and
+-- the options window, so a review screenshot says why a mode was chosen).
+-- api = { groupRole(), tankAura(), shieldTank(), otherTank(), specRole() }; each may be missing, error or be
+-- secret, which counts as "unknown".
+--   1. Group role TANK or HEALER (a deliberate choice) wins.
+--   2. Tank form, stance or aura (Bear Form; on Forever not used for Warriors/Paladins, see shieldTank).
+--   3. Shield (Forever, Warrior/Paladin): tank, unless another tank is in the group, then damage dealer.
+--      The DAMAGER group role does not override this: a party without a role check gives everybody DAMAGER.
+--   4. Group role DAMAGER, then specialization role (Retail), else damage dealer.
+ns.ROLE_REASONS = {
+    groupTank = "group role", groupHealer = "group role", aura = "tank form or stance",
+    shield = "shield, no other tank", shieldOtherTank = "shield, another tank in the group",
+    groupDamage = "group role", specTank = "specialization", specHealer = "specialization", default = "no tank signal",
+}
+
 function ns.ResolveRole(api)
     local function read(fn)
         if type(fn) ~= "function" then return nil end
@@ -78,18 +91,42 @@ function ns.ResolveRole(api)
         if not ok or value == nil or issecretvalue(value) then return nil end
         return value
     end
-    if read(api.tankAura) == true then return "tank" end
     local group = read(api.groupRole)
-    if group == "TANK" then return "tank" end
-    if group == "HEALER" then return "healer" end
-    -- A shield beats the DAMAGER group role: a party without the role check gives everybody DAMAGER.
-    if read(api.shieldTank) == true then return "tank" end
-    if group == "DAMAGER" then return "damage" end
+    if group == "TANK" then return "tank", "groupTank" end
+    if group == "HEALER" then return "healer", "groupHealer" end
+    if read(api.tankAura) == true then return "tank", "aura" end
+    if read(api.shieldTank) == true then
+        if read(api.otherTank) == true then return "damage", "shieldOtherTank" end
+        return "tank", "shield"
+    end
+    if group == "DAMAGER" then return "damage", "groupDamage" end
     local spec = read(api.specRole)
-    if spec == "TANK" then return "tank" end
-    if spec == "HEALER" then return "healer" end
-    return "damage"
+    if spec == "TANK" then return "tank", "specTank" end
+    if spec == "HEALER" then return "healer", "specHealer" end
+    return "damage", "default"
 end
+
+-- Another group member who tanks: assigned TANK role, or a readable tank form/stance/aura.
+local function otherTankInGroup()
+    local prefix, count
+    if IsInRaid and IsInRaid() then prefix, count = "raid", GetNumGroupMembers()
+    elseif IsInGroup and IsInGroup() then prefix, count = "party", GetNumSubgroupMembers()
+    else return false end
+    for index = 1, count do
+        local member = prefix .. index
+        local same = UnitIsUnit(member, "player")
+        if same ~= nil and not issecretvalue(same) and not same and UnitExists(member) then
+            local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(member)
+            if role == "TANK" then return true end
+            if UnitHasEffectivelyTankAura then
+                local ok, tank = pcall(UnitHasEffectivelyTankAura, member)
+                if ok and tank == true then return true end
+            end
+        end
+    end
+    return false
+end
+ns.OtherTankInGroup = otherTankInGroup
 
 function ns.DetectRole()
     return ns.ResolveRole({
@@ -104,6 +141,7 @@ function ns.DetectRole()
             if PlayerUtil and PlayerUtil.IsPlayerEffectivelyTank then return PlayerUtil.IsPlayerEffectivelyTank() end
         end,
         groupRole = function() return UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") end,
+        otherTank = otherTankInGroup,
         -- Forever has no real specializations: a Warrior or Paladin with a shield is a tank unless the group
         -- role says otherwise. Shamans carry shields in every role, so they are left out. Retail uses the spec.
         shieldTank = function()
@@ -129,7 +167,12 @@ ns.MODE_TEXT = { tank = "Tank mode", damage = "DPS mode", healer = "Healer mode"
 function ns.RoleModeText()
     local role = ns.GetRole()
     local manual = TrisThreatDB and TrisThreatDB.role ~= "auto"
-    return ns.MODE_TEXT[role] or role, manual, role
+    local reason
+    if manual then reason = "set by hand" else
+        local _, key = ns.DetectRole()
+        reason = ns.ROLE_REASONS[key] or key
+    end
+    return ns.MODE_TEXT[role] or role, manual, role, reason
 end
 
 function ns.GetRole()

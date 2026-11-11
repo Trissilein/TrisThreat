@@ -12,8 +12,8 @@ end
 local function addTooltipLines(tooltip)
     tooltip:AddLine("TrisThreat", 1, 0.82, 0.2)
     if TrisThreatDB and ns.RoleModeText then
-        local text, manual = ns.RoleModeText()
-        tooltip:AddLine(L[text] .. (manual and (" (" .. L["set by hand"] .. ")") or (" (" .. L["detected"] .. ")")), 1, 1, 1)
+        local text, _, _, reason = ns.RoleModeText()
+        tooltip:AddLine(L[text] .. " (" .. L[reason] .. ")", 1, 1, 1)
     end
     tooltip:AddLine(L["Click: open settings"], 0.85, 0.88, 0.94)
 end

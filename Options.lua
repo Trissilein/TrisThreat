@@ -453,8 +453,9 @@ local function refresh()
     if not frame then return end
     for _, fn in ipairs(controls) do fn() end
     if ns.detectedText then
-        local role = ns.DetectRole()
-        ns.detectedText:SetText(string.format(L["Detected: %s"], L[ROLE_TEXT[role]] or role))
+        local role, key = ns.DetectRole()
+        local reason = ns.ROLE_REASONS[key] or key
+        ns.detectedText:SetText(string.format(L["Detected: %s"], (L[ROLE_TEXT[role]] or role) .. " (" .. L[reason] .. ")"))
     end
     if ns.OnModeChanged and ns.RoleModeText then
         local text, manual = ns.RoleModeText()
