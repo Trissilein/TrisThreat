@@ -114,12 +114,81 @@ local function dropdown(parent, y, key, choices)
     return dd
 end
 
+local mock  -- mock nameplate in the options window: { panel, bar, capsule, states }
+
+local function refreshMock()
+    if not mock then return end
+    local db = TrisThreatDB
+    ns.AnchorCapsule(mock.capsule, mock.bar, mock.panel)
+    local state = ns.previewState
+    local c = db.colorBar and ns.COLORS[state] or { 0.62, 0.16, 0.16 }
+    mock.bar:SetStatusBarColor(c[1], c[2], c[3])
+    ns.PaintCapsule(mock.capsule, state, "70%", 70)
+    for key, button in pairs(mock.states) do button.selected:SetShown(key == state) end
+end
+
+local function onLayoutChanged()
+    ns.ApplyLayout()
+    refreshMock()
+end
+
+local function buildMock(parent, y)
+    local panel = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    panel:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, y)
+    panel:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -16, y)
+    panel:SetHeight(100)
+    panel:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+    panel:SetBackdropColor(0.09, 0.1, 0.06, 1)
+    panel:SetBackdropBorderColor(0.35, 0.29, 0.18, 0.9)
+    panel:SetClipsChildren(true)
+    local name = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    name:SetText("Blackrock Outrunner")
+    name:SetPoint("TOP", panel, "TOP", 0, -34)
+    local bar = CreateFrame("StatusBar", nil, panel)
+    bar:SetSize(230, 14)
+    bar:SetPoint("TOP", name, "BOTTOM", 0, -3)
+    bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+    bar:SetMinMaxValues(0, 100)
+    bar:SetValue(64)
+    local back = bar:CreateTexture(nil, "BACKGROUND")
+    back:SetAllPoints()
+    back:SetColorTexture(0, 0, 0, 0.7)
+    local capsule = ns.CreateCapsule()
+    mock = { panel = panel, bar = bar, capsule = capsule, states = {} }
+
+    -- State buttons double as the legend: click one to preview that threat state here and on your target.
+    local x = 8
+    for _, entry in ipairs({ { "good", "Good" }, { "warn", "Careful" }, { "bad", "Bad" }, { "offtank", "Off-tank" } }) do
+        local button = CreateFrame("Button", nil, panel)
+        button:SetSize(86, 16)
+        button:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", x, 6)
+        local fill = button:CreateTexture(nil, "ARTWORK")
+        fill:SetPoint("LEFT")
+        fill:SetSize(12, 12)
+        fill:SetColorTexture(unpack(ns.COLORS[entry[1]]))
+        local text = label(button, entry[2], "GameFontNormalSmall")
+        text:SetPoint("LEFT", fill, "RIGHT", 4, 0)
+        button.selected = button:CreateTexture(nil, "BACKGROUND")
+        button.selected:SetPoint("TOPLEFT", fill, "TOPLEFT", -2, 2)
+        button.selected:SetPoint("BOTTOMRIGHT", fill, "BOTTOMRIGHT", 2, -2)
+        button.selected:SetColorTexture(1, 1, 1, 0.9)
+        button:SetScript("OnClick", function()
+            ns.previewState = entry[1]
+            refreshMock()
+            ns.ShowPreview()
+        end)
+        mock.states[entry[1]] = button
+        x = x + 92
+    end
+    return panel
+end
+
 local ROLE_TEXT = { tank = "Tank", damage = "Damage dealer", healer = "Healer" }
 
 local function build()
     frame = CreateFrame("Frame", "TrisThreatOptions", UIParent, "BackdropTemplate")
     stylePanel(frame, 0.035, 0.04, 0.05)
-    frame:SetSize(420, 668)
+    frame:SetSize(420, 776)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
     frame:SetClampedToScreen(true)
@@ -147,7 +216,8 @@ local function build()
     close:SetPoint("RIGHT", -2, 0)
     close:SetScript("OnClick", function() frame:Hide() end)
 
-    local y = -52
+    buildMock(frame, -48)
+    local y = -158
     checkbox(frame, "Enabled", y, "enabled")
     y = y - 34
 
@@ -171,9 +241,9 @@ local function build()
     y = y - 40
 
     heading(frame, "Position", y); y = y - 26
-    slider(frame, "Horizontal offset", y, "offsetX", -ns.OFFSET_LIMIT, ns.OFFSET_LIMIT, 1, ns.ApplyLayout); y = y - 48
-    slider(frame, "Vertical offset", y, "offsetY", -ns.OFFSET_LIMIT, ns.OFFSET_LIMIT, 1, ns.ApplyLayout); y = y - 48
-    slider(frame, "Size", y, "scale", 0.5, 2, 0.1, ns.ApplyLayout); y = y - 44
+    slider(frame, "Horizontal offset", y, "offsetX", -ns.OFFSET_LIMIT, ns.OFFSET_LIMIT, 1, onLayoutChanged); y = y - 48
+    slider(frame, "Vertical offset", y, "offsetY", -ns.OFFSET_LIMIT, ns.OFFSET_LIMIT, 1, onLayoutChanged); y = y - 48
+    slider(frame, "Size", y, "scale", 0.5, 2, 0.1, onLayoutChanged); y = y - 44
     local hint = label(frame, "Nameplate offsets in pixels. Positive values move the capsule right and up.", "GameFontNormalSmall")
     hint:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, y)
     hint:SetPoint("RIGHT", frame, "RIGHT", -18, 0)
@@ -186,7 +256,7 @@ local function build()
     reset:SetText(L["Reset position"])
     reset:SetScript("OnClick", function()
         TrisThreatDB.offsetX, TrisThreatDB.offsetY, TrisThreatDB.scale = 0, 0, 1
-        ns.RefreshOptions(); ns.ApplyLayout()
+        ns.RefreshOptions(); onLayoutChanged()
     end)
     local previewButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     previewButton:SetSize(150, 22)
@@ -198,26 +268,12 @@ local function build()
     y = y - 38
 
     heading(frame, "Colors", y); y = y - 26
-    checkbox(frame, "Color the nameplate by threat", y, "colorBar"); y = y - 26
-    checkbox(frame, "Show fill bar", y, "showBar", function() ns.ApplyLayout() end); y = y - 26
+    checkbox(frame, "Color the nameplate by threat", y, "colorBar", function() onLayoutChanged() end); y = y - 26
+    checkbox(frame, "Show fill bar", y, "showBar", function() onLayoutChanged() end); y = y - 26
     checkbox(frame, "Only in instances", y, "onlyInstances"); y = y - 26
     checkbox(frame, "Hide on trivial mobs", y, "hideTrivial"); y = y - 26
     checkbox(frame, "Off-tank color", y, "offTank"); y = y - 28
 
-    local swatches = {
-        { "good", "Good" }, { "warn", "Careful" }, { "bad", "Bad" }, { "offtank", "Off-tank" },
-    }
-    local x = 20
-    for _, swatch in ipairs(swatches) do
-        local tex = frame:CreateTexture(nil, "ARTWORK")
-        tex:SetSize(14, 14)
-        tex:SetPoint("TOPLEFT", frame, "TOPLEFT", x, y)
-        tex:SetColorTexture(unpack(ns.COLORS[swatch[1]]))
-        local fs = label(frame, swatch[2], "GameFontNormalSmall")
-        fs:SetPoint("LEFT", tex, "RIGHT", 4, 0)
-        x = x + 96
-    end
-    y = y - 22
     local legend = label(frame, "As tank: green = you hold it. As damage dealer or healer: red = you pulled it.", "GameFontNormalSmall")
     legend:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, y)
     legend:SetPoint("RIGHT", frame, "RIGHT", -18, 0)
@@ -235,6 +291,10 @@ local function build()
     end)
     frame.minimapShow = mini
     frame:SetScript("OnHide", ns.HidePreview)
+    frame:SetScript("OnShow", function()
+        refreshMock()
+        ns.ShowPreview() -- test mode: the target gets a capsule without combat
+    end)
 end
 
 local function refresh()
@@ -244,9 +304,12 @@ local function refresh()
         local role = ns.DetectRole()
         ns.detectedText:SetText(string.format(L["Detected: %s"], L[ROLE_TEXT[role]] or role))
     end
+    refreshMock()
     if frame.minimapShow then frame.minimapShow:SetChecked(not TrisThreatDB.minimap.hide) end
 end
 ns.RefreshOptions = refresh
+
+function ns.previewWanted() return frame ~= nil and frame:IsShown() end
 
 function ns.ToggleOptions()
     if not frame then build(); refresh() end

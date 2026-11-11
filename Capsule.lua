@@ -19,7 +19,7 @@ local preview       -- capsule shown by the options window
 -- Frame
 ----------------------------------------------------------------------------------------------------
 
-local function createCapsule()
+function ns.CreateCapsule()
     local f = CreateFrame("Frame", nil, UIParent)
     f:SetSize(WIDTH, HEIGHT)
     f:SetFrameStrata("HIGH")
@@ -115,7 +115,7 @@ if CompactUnitFrame_UpdateHealthColor then
 end
 
 local function acquire()
-    return table.remove(pool) or createCapsule()
+    return table.remove(pool) or ns.CreateCapsule()
 end
 
 local function release(unit)
@@ -131,20 +131,25 @@ local function release(unit)
     pool[#pool + 1] = f
 end
 
-local function layout(f, plate)
+-- Anchors a capsule to a bar frame. Also used by the options window's mock nameplate.
+function ns.AnchorCapsule(f, bar, parent)
     local db = TrisThreatDB
     local scale = db.scale
-    local bar, owner, kind = findBar(plate)
-    f:SetParent(plate)
+    f:SetParent(parent or bar)
     f:SetScale(scale)
     f:ClearAllPoints()
     f:SetPoint("BOTTOMLEFT", bar, "TOPLEFT", (BASE_X + db.offsetX) / scale, (BASE_Y + db.offsetY) / scale)
+end
+
+local function layout(f, plate)
+    local bar, owner, kind = findBar(plate)
+    ns.AnchorCapsule(f, bar, plate)
     f:SetFrameStrata("HIGH")
     f.tintOwner, f.tintKind = owner, kind
     if owner then hookOwner(kind, owner) end
 end
 
-local function paint(f, colorKey, textValue, barValue)
+function ns.PaintCapsule(f, colorKey, textValue, barValue)
     local c = ns.COLORS[colorKey] or ns.COLORS.unknown
     f.bar:SetStatusBarColor(c[1], c[2], c[3], 1)
     f.bar:SetValue(TrisThreatDB.showBar and barValue or 100)
@@ -241,7 +246,7 @@ function ns.UpdateUnit(unit)
     local f = active[unit]
     if not f then f = acquire(); active[unit] = f end
     layout(f, plate)
-    paint(f, colorKey, text, barValue)
+    ns.PaintCapsule(f, colorKey, text, barValue)
     if db.colorBar and f.tintOwner then
         tints[unit] = ns.COLORS[colorKey] or ns.COLORS.unknown
         applyTint(f.tintKind, f.tintOwner, tints[unit])
@@ -277,23 +282,40 @@ function ns.ApplyLayout()
         local plate = C_NamePlate.GetNamePlateForUnit(unit)
         if plate then layout(f, plate) end
     end
-    if preview and preview:IsShown() then
-        local plate = C_NamePlate.GetNamePlateForUnit("target")
-        if plate then layout(preview, plate) end
+    if preview and preview:IsShown() then ns.ShowPreview() end
+end
+
+-- Test mode: a capsule on the current target, shown while the options window is open (no combat needed).
+ns.previewState = "good"
+local previewTint
+
+local function clearPreviewTint()
+    if previewTint then
+        tints[previewTint.unit] = nil
+        restoreTint(previewTint.kind, previewTint.owner)
+        previewTint = nil
     end
 end
 
 function ns.ShowPreview()
     local plate = C_NamePlate.GetNamePlateForUnit("target")
-    if not plate then return false end
-    preview = preview or createCapsule()
+    if not plate then ns.HidePreview(); return false end
+    preview = preview or ns.CreateCapsule()
     layout(preview, plate)
-    local role = ns.GetRole()
-    paint(preview, role == "tank" and "good" or "warn", "70%", 70)
+    ns.PaintCapsule(preview, ns.previewState, "70%", 70)
+    clearPreviewTint()
+    local unit = plateUnit(plate)
+    if TrisThreatDB.colorBar and preview.tintOwner and unit and not active[unit] then
+        local color = ns.COLORS[ns.previewState]
+        tints[unit] = color
+        previewTint = { unit = unit, kind = preview.tintKind, owner = preview.tintOwner }
+        applyTint(preview.tintKind, preview.tintOwner, color)
+    end
     return true
 end
 
 function ns.HidePreview()
+    clearPreviewTint()
     if preview then preview:Hide() end
 end
 
@@ -316,7 +338,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         for _, name in ipairs({ "PLAYER_ENTERING_WORLD", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED",
             "UNIT_THREAT_LIST_UPDATE", "UNIT_THREAT_SITUATION_UPDATE", "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
             "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "UPDATE_SHAPESHIFT_FORM", "PLAYER_EQUIPMENT_CHANGED",
-            "PLAYER_TALENT_UPDATE", "ACTIVE_TALENT_GROUP_CHANGED" }) do
+            "PLAYER_TALENT_UPDATE", "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_TARGET_CHANGED" }) do
             pcall(self.RegisterEvent, self, name)
         end
         self:RegisterUnitEvent("UNIT_AURA", "player")
@@ -336,6 +358,10 @@ frame:SetScript("OnEvent", function(self, event, arg1)
             ns.UpdateUnit(arg1)
         else
             dirty = true
+        end
+    elseif event == "PLAYER_TARGET_CHANGED" then
+        if ns.previewWanted and ns.previewWanted() then
+            C_Timer.After(0, ns.ShowPreview) -- the new target's plate exists one frame later
         end
     elseif event == "UNIT_AURA" then
         -- A tank buff (Righteous Fury, Bear Form aura...) can change the detected role.
