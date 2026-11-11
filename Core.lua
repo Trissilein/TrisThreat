@@ -20,6 +20,7 @@ ns.defaults = {
     colorText = true,    -- threat color on the number
     colorBackground = false, -- threat color on the badge/segment background (the strip fill is always colored)
     stripText = true,    -- strip mode shows the number at its right end
+    glow = true,         -- pulsing red halo: tank lost aggro, or anybody else pulled it
     colorBar = false,    -- also tint the nameplate health bar
     onlyInstances = false,
     hideTrivial = true,
@@ -54,7 +55,7 @@ function ns.NormalizeDB(db)
     db.scale = clamp(db.scale, 0.5, 2, 1)
     db.mode = DISPLAY_MODES[db.mode] and db.mode or d.mode
     db.side = SIDES[db.side] and db.side or d.side
-    for _, key in ipairs({ "makeRoom", "colorText", "colorBackground", "stripText", "colorBar", "hideTrivial", "offTank" }) do
+    for _, key in ipairs({ "makeRoom", "colorText", "colorBackground", "stripText", "glow", "colorBar", "hideTrivial", "offTank" }) do
         if db[key] == nil then db[key] = d[key] end
         db[key] = db[key] == true
     end
@@ -152,6 +153,14 @@ end
 -- A tank's lead over the next player: 100 % red (about to lose it), 200 % or more green.
 function ns.LeadColor(lead)
     return ns.GradientColor((tonumber(lead) or 100) - 100, true)
+end
+
+-- Preview: warn at the bad end of the slider (tank near 0 %, everybody else near 100 %).
+function ns.PreviewWarn()
+    if ns.previewOffTank then return false end
+    local tank = ns.GetRole() == "tank"
+    local percent = ns.previewPercent or 0
+    return (tank and percent <= 10) or (not tank and percent >= 90)
 end
 
 -- Color for a readable percentage; a co-tank or pet holding the mob wins (tank only).

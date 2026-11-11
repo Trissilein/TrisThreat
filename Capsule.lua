@@ -251,6 +251,8 @@ function ns.UpdateUnit(unit)
     elseif holding and UnitThreatPercentageOfLead then
         -- Tanking: full and green with a big lead, shrinking and turning red as the next player closes in.
         local lead = UnitThreatPercentageOfLead("player", unit)
+        -- Alone on the threat list there is no next player: a readable 0 means "all yours", so full and green.
+        if lead ~= nil and not issecretvalue(lead) and lead <= 0 then lead = 200 end
         if lead ~= nil then
             fill, low, high = lead, 100, 200
             color = curveColor("lead", lead) or color
@@ -267,7 +269,9 @@ function ns.UpdateUnit(unit)
     if el.parts and el.parts.uf ~= parts.uf and el.parts.blizzard then ns.SyncRoom(el.parts.uf, nil) end
     el.parts = parts
     ns.Arrange(el, parts)
-    ns.PaintElement(el, color, readValue(unit, db.value, status), fill, isTargetPlate(plate), low, high)
+    -- Aggro warning: a tank lost the enemy (and no co-tank has it), or anybody else pulled it.
+    local warn = status ~= false and ((role == "tank" and status <= 1 and not offTank) or (role ~= "tank" and status >= 2))
+    ns.PaintElement(el, color, readValue(unit, db.value, status), fill, isTargetPlate(plate), low, high, warn)
 
     if db.colorBar and parts.blizzard then
         tints[unit] = color
@@ -336,7 +340,7 @@ function ns.ShowPreview()
     previewParts, previewUnit = parts, unit
     ns.Arrange(preview, parts)
     local color = ns.ColorForPercent(ns.previewPercent, ns.GetRole(), ns.previewOffTank)
-    ns.PaintElement(preview, color, ns.previewPercent .. "%", ns.previewPercent, true)
+    ns.PaintElement(preview, color, ns.previewPercent .. "%", ns.previewPercent, true, 0, 100, ns.PreviewWarn())
     if TrisThreatDB.colorBar and parts.blizzard and unit then
         tints[unit] = color
         applyTint(parts.bar, color)

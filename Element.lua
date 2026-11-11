@@ -55,6 +55,21 @@ function ns.CreateElement()
     el.selected = el.top:CreateTexture(nil, "OVERLAY")
     el.text = el.top:CreateFontString(nil, "OVERLAY")
     el.text:SetTextColor(1, 1, 1, 1)
+
+    -- Aggro warning: a red halo behind the element that pulses.
+    el.glow = el:CreateTexture(nil, "BACKGROUND", nil, -8)
+    el.glow:SetTexture("Interface\\GLUES\\Models\\UI_Draenei\\GenericGlow64")
+    el.glow:SetBlendMode("ADD")
+    el.glow:SetVertexColor(1, 0.12, 0.05, 1)
+    el.glow:SetPoint("TOPLEFT", el, "TOPLEFT", -12, 10)
+    el.glow:SetPoint("BOTTOMRIGHT", el, "BOTTOMRIGHT", 12, -10)
+    el.glow:Hide()
+    el.pulse = el.glow:CreateAnimationGroup()
+    el.pulse:SetLooping("BOUNCE")
+    local fade = el.pulse:CreateAnimation("Alpha")
+    fade:SetFromAlpha(0.3)
+    fade:SetToAlpha(1)
+    fade:SetDuration(0.45)
     return el
 end
 
@@ -139,7 +154,7 @@ local function setBarColor(bar, color, alpha)
 end
 
 -- color = { r, g, b } (may hold secret numbers); value = threat percentage for the strip fill.
-function ns.PaintElement(el, color, text, value, selected, low, high)
+function ns.PaintElement(el, color, text, value, selected, low, high, glow)
     local db = TrisThreatDB
     color = color or ns.COLORS.unknown
     if el.look == "strip" then
@@ -171,6 +186,13 @@ function ns.PaintElement(el, color, text, value, selected, low, high)
         el.text:SetTextColor(1, 1, 1, 1)
     end
     el.selected:SetShown(selected == true and (el.look == "badge") and el.selected:GetAtlas() ~= nil)
+    if glow and db.glow then
+        el.glow:Show()
+        if not el.pulse:IsPlaying() then el.pulse:Play() end
+    else
+        el.pulse:Stop()
+        el.glow:Hide()
+    end
     el:Show()
 end
 

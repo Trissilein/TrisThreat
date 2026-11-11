@@ -85,3 +85,5 @@ L["No element on trivial or minor enemies."] = "Kein Element bei trivialen oder 
 L["Shows the TrisThreat button on the minimap. Right-click the button to hide it."] = "Zeigt den TrisThreat-Knopf an der Minimap. Rechtsklick auf den Knopf blendet ihn aus."
 L["Try a threat value: the preview above and your current target show it, no combat needed."] = "Threat-Wert ausprobieren: Vorschau oben und dein aktuelles Ziel zeigen ihn, ohne Kampf."
 L["Preview the off-tank color (blue, tanks only)."] = "Off-Tank-Farbe in der Vorschau (blau, nur Tanks)."
+L["Aggro warning glow"] = "Aggro-Warnleuchten"
+L["A pulsing red glow around the element when it matters: as a tank when you lose the enemy (and no other tank has it), otherwise when you pull it."] = "Ein pulsierendes rotes Leuchten um das Element, wenn es zählt: als Tank, wenn du den Gegner verlierst (und kein anderer Tank ihn hat), sonst, wenn du ihn ziehst."

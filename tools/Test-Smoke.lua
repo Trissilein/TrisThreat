@@ -23,6 +23,9 @@ local returns = {
     CreateFontString = function() return Stub() end,
     GetName = function() return nil end,
     GetStringWidth = function() return 80 end,
+    CreateAnimationGroup = function() return Stub() end,
+    CreateAnimation = function() return Stub() end,
+    IsPlaying = function() return false end,
 }
 -- Unknown keys return a callable stub: works both as a method (obj:Foo()) and as a child region (obj.Low:SetText()).
 function Stub(name)

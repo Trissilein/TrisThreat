@@ -69,6 +69,7 @@ local TIPS = {
     ["Show minimap icon"] = "Shows the TrisThreat button on the minimap. Right-click the button to hide it.",
     ["Preview threat"] = "Try a threat value: the preview above and your current target show it, no combat needed.",
     ["Off-tank"] = "Preview the off-tank color (blue, tanks only).",
+    ["Aggro warning glow"] = "A pulsing red glow around the element when it matters: as a tank when you lose the enemy (and no other tank has it), otherwise when you pull it.",
 }
 
 local function addTooltip(widget, text)
@@ -283,7 +284,7 @@ function ns.RefreshMock()
     local barColor = db.colorBar and color or { 0.78, 0.12, 0.12 }
     mock.bar:SetStatusBarColor(barColor[1], barColor[2], barColor[3])
     ns.Arrange(mock.element, mock.parts)
-    ns.PaintElement(mock.element, color, ns.previewPercent .. "%", ns.previewPercent, true)
+    ns.PaintElement(mock.element, color, ns.previewPercent .. "%", ns.previewPercent, true, 0, 100, ns.PreviewWarn())
     if mock.percentText then mock.percentText:SetText(ns.previewPercent .. "%") end
 end
 
@@ -372,7 +373,8 @@ local function build()
     checkbox(frame, "Color the background", COL1 + 150, yl, "colorBackground"); yl = yl - 26
     checkbox(frame, "Color the nameplate bar", COL1, yl, "colorBar")
     checkbox(frame, "Number on the strip", COL1 + 150, yl, "stripText"); yl = yl - 26
-    checkbox(frame, "Off-tank color", COL1, yl, "offTank"); yl = yl - 30
+    checkbox(frame, "Off-tank color", COL1, yl, "offTank")
+    checkbox(frame, "Aggro warning glow", COL1 + 150, yl, "glow"); yl = yl - 30
     local legend = label(frame, "Green at 0 % threat, red at 100 %. As a tank holding the enemy, it follows your lead: full and green with a big lead, shrinking and turning red as the next player closes in.", "GameFontNormalSmall")
     legend:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 2, yl)
     legend:SetWidth(COLW)
