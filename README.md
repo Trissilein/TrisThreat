@@ -12,7 +12,7 @@ Retail compatibility: **12.1.5** (interface **120105**). WoW Forever compatibili
 
 - A threat element on each enemy nameplate that fights you, with the threat value (for example `70%`).
 - The color grades continuously with your threat, one step per percent: green at 0 %, yellow at 50 %, red at 100 %. As a tank holding the enemy it follows your lead over the next player instead: full and green with a big lead, shrinking and turning red as they close in.
-- Role detection is automatic (stance, form or aura of a tank, then the assigned group role, then on WoW Forever a shield on a Warrior or Paladin, then your specialization role) and can be overridden in the settings.
+- Role detection is automatic (stance, form or aura of a tank, then the assigned group role, then your specialization role; on WoW Forever a Warrior or Paladin is a tank exactly when a shield is equipped, whatever aura or stance is active) and can be overridden in the settings.
 - When another tank or your pet holds the enemy, the capsule turns blue instead of red (tank only).
 - Four display modes in Blizzard's own nameplate art: a second level badge (left, right, top or bottom of the health bar), a segment inside the bar's end, a thin strip above or below the bar whose fill is your threat, or a floating capsule you move up to 100 pixels in every direction. Integrated modes can move the name, raid icon and crowd-control icons aside to make room.
 - Color the number, the background, the nameplate bar, or any combination.

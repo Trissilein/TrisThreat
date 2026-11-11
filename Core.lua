@@ -93,6 +93,12 @@ end
 function ns.DetectRole()
     return ns.ResolveRole({
         tankAura = function()
+            -- Forever, Warrior and Paladin: the shield decides (Righteous Fury or a stance on a two-hander is not a
+            -- tank). Bear Form and other classes' tank auras still count.
+            if not GetSpecialization then
+                local _, class = UnitClass("player")
+                if class == "WARRIOR" or class == "PALADIN" then return nil end
+            end
             if UnitHasEffectivelyTankAura then return UnitHasEffectivelyTankAura("player") end
             if PlayerUtil and PlayerUtil.IsPlayerEffectivelyTank then return PlayerUtil.IsPlayerEffectivelyTank() end
         end,
