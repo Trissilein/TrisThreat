@@ -2,13 +2,13 @@ local addonName, ns = ...
 local L = ns.L
 local issecretvalue = issecretvalue or function() return false end
 
-local TEXTURE_FILL = "Interface\\AddOns\\TrisThreat\\Assets\\Capsule_Fill.tga"
-local TEXTURE_BORDER = "Interface\\AddOns\\TrisThreat\\Assets\\Capsule_Border.tga"
-local WIDTH, HEIGHT = 56, 28
+local TEXTURE_FILL = "Interface\\AddOns\\TrisThreat\\Assets\\Tab_Fill.tga"
+local TEXTURE_BORDER = "Interface\\AddOns\\TrisThreat\\Assets\\Tab_Border.tga"
+local WIDTH, HEIGHT = 60, 22
 
--- Default placement: the capsule's bottom-left corner sits on the health bar's top-left corner, pulled a little
--- onto the bar so it looks attached. The user's offsets are added on top.
-local BASE_X, BASE_Y = -6, -8
+-- The capsule is a tab that grows out of the health bar: flat bottom edge on the bar's top-left corner,
+-- rounded top corners, same fill color as the bar. The user's offsets are added on top.
+local BASE_X, BASE_Y = 0, -1
 
 local tints = {}    -- unit token -> { r, g, b } while the nameplate bar is colored by threat
 local active = {}   -- unit token -> capsule
@@ -24,29 +24,26 @@ function ns.CreateCapsule()
     f:SetSize(WIDTH, HEIGHT)
     f:SetFrameStrata("HIGH")
 
-    f.bg = f:CreateTexture(nil, "BACKGROUND")
-    f.bg:SetAllPoints()
-    f.bg:SetTexture(TEXTURE_FILL)
-    f.bg:SetVertexColor(0.04, 0.045, 0.055, 0.9)
+    f.fill = f:CreateTexture(nil, "BACKGROUND")
+    f.fill:SetAllPoints()
+    f.fill:SetTexture(TEXTURE_FILL)
 
-    f.bar = CreateFrame("StatusBar", nil, f)
-    f.bar:SetPoint("TOPLEFT", f, "TOPLEFT", 2, -2)
-    f.bar:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -2, 2)
-    f.bar:SetStatusBarTexture(TEXTURE_FILL)
-    f.bar:SetMinMaxValues(0, 100)
-    f.bar:SetValue(100)
+    -- A soft top-to-bottom sheen gives the flat color the same depth as a nameplate bar.
+    f.sheen = f:CreateTexture(nil, "BORDER")
+    f.sheen:SetAllPoints()
+    f.sheen:SetTexture(TEXTURE_FILL)
+    if f.sheen.SetGradient and CreateColor then
+        f.sheen:SetGradient("VERTICAL", CreateColor(0, 0, 0, 0.28), CreateColor(1, 1, 1, 0.22))
+    end
 
-    f.top = CreateFrame("Frame", nil, f)
-    f.top:SetAllPoints()
-    f.top:SetFrameLevel(f.bar:GetFrameLevel() + 2)
-    f.border = f.top:CreateTexture(nil, "OVERLAY")
+    f.border = f:CreateTexture(nil, "ARTWORK")
     f.border:SetAllPoints()
     f.border:SetTexture(TEXTURE_BORDER)
-    f.border:SetVertexColor(0.88, 0.68, 0.24, 1)
+    f.border:SetVertexColor(0, 0, 0, 0.95)
 
-    f.text = f.top:CreateFontString(nil, "OVERLAY")
-    f.text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 13, "OUTLINE")
-    f.text:SetPoint("CENTER", f.top, "CENTER", 0, 0)
+    f.text = f:CreateFontString(nil, "OVERLAY")
+    f.text:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    f.text:SetPoint("CENTER", f, "CENTER", 0, 0)
     f.text:SetTextColor(1, 1, 1, 1)
     return f
 end
@@ -86,6 +83,20 @@ local function applyTint(kind, owner, color)
     end)
 end
 
+-- The color the nameplate bar currently shows (nil when it cannot be read).
+local function readBarColor(kind, owner)
+    if not owner then return nil end
+    local ok, r, g, b = pcall(function()
+        if kind == "platynator" then return owner.statusBar:GetStatusBarTexture():GetVertexColor() end
+        if kind == "blizzard" then return owner.healthBar:GetStatusBarColor() end
+    end)
+    if ok and type(r) == "number" and type(g) == "number" and type(b) == "number"
+        and not issecretvalue(r) and not issecretvalue(g) and not issecretvalue(b) then
+        return { r, g, b }
+    end
+    return nil
+end
+
 -- Give the nameplate its own color logic back.
 local function restoreTint(kind, owner)
     pcall(function()
@@ -97,20 +108,30 @@ local function restoreTint(kind, owner)
     end)
 end
 
--- Both plate addons repaint their bar on their own events; a post-hook puts our color back on top.
+local function followBar(unit, kind, owner)
+    local f = active[unit]
+    if not f or TrisThreatDB.colorBar then return end
+    local c = readBarColor(kind, owner)
+    if c then ns.PaintCapsule(f, c, nil) end
+end
+
+-- Both plate addons repaint their bar on their own events; a post-hook puts our color back on top, or (when we
+-- do not tint) lets the capsule follow the bar's color.
 local function hookOwner(kind, owner)
     if kind ~= "platynator" or owner.trisThreatHooked then return end
     owner.trisThreatHooked = true
     hooksecurefunc(owner, "SetColor", function(self)
         local unit = self.unit
-        if unit and not issecretvalue(unit) and tints[unit] then applyTint("platynator", self, tints[unit]) end
+        if not unit or issecretvalue(unit) then return end
+        if tints[unit] then applyTint("platynator", self, tints[unit]) else followBar(unit, "platynator", self) end
     end)
 end
 
 if CompactUnitFrame_UpdateHealthColor then
     hooksecurefunc("CompactUnitFrame_UpdateHealthColor", function(frame)
         local unit = frame and frame.unit
-        if unit and not issecretvalue(unit) and tints[unit] then applyTint("blizzard", frame, tints[unit]) end
+        if not unit or issecretvalue(unit) then return end
+        if tints[unit] then applyTint("blizzard", frame, tints[unit]) else followBar(unit, "blizzard", frame) end
     end)
 end
 
@@ -149,11 +170,11 @@ local function layout(f, plate)
     if owner then hookOwner(kind, owner) end
 end
 
-function ns.PaintCapsule(f, colorKey, textValue, barValue)
-    local c = ns.COLORS[colorKey] or ns.COLORS.unknown
-    f.bar:SetStatusBarColor(c[1], c[2], c[3], 1)
-    f.bar:SetValue(TrisThreatDB.showBar and barValue or 100)
-    f.text:SetText(textValue or "")
+-- color = { r, g, b }; textValue nil keeps the current text (used when only the color changes).
+function ns.PaintCapsule(f, color, textValue)
+    local c = color or ns.COLORS.unknown
+    f.fill:SetVertexColor(c[1], c[2], c[3], 1)
+    if textValue ~= nil then f.text:SetText(textValue) end
     f:Show()
 end
 
@@ -177,15 +198,13 @@ local function formatPercent(value, prefix)
     return (prefix or "") .. math.floor(value + 0.5) .. "%"
 end
 
--- Returns text and a value for the fill bar. Secret numbers go straight to the engine (SetText / SetValue).
+-- Returns the display text. Secret numbers go straight to the engine (SetText).
 local function readValue(unit, mode, status)
     if mode == "lead" and status == 3 and UnitThreatPercentageOfLead then
-        local lead = UnitThreatPercentageOfLead("player", unit)
-        return formatPercent(lead, "+"), lead or 0
+        return formatPercent(UnitThreatPercentageOfLead("player", unit), "+")
     end
     local _, _, scaled, raw = UnitDetailedThreatSituation("player", unit)
-    local value = (mode == "raw") and raw or scaled
-    return formatPercent(value), value or 0
+    return formatPercent((mode == "raw") and raw or scaled)
 end
 
 local function holds(tankUnit, unit)
@@ -241,19 +260,24 @@ function ns.UpdateUnit(unit)
     local role = ns.GetRole()
     local offTank = status ~= false and db.offTank and role == "tank" and status < 3 and otherHolds(unit)
     local colorKey = ns.StatusColorKey(status, role, offTank)
-    local text, barValue = readValue(unit, db.value, status)
+    local color = ns.COLORS[colorKey] or ns.COLORS.unknown
+    local text = readValue(unit, db.value, status)
 
     local f = active[unit]
     if not f then f = acquire(); active[unit] = f end
     layout(f, plate)
-    ns.PaintCapsule(f, colorKey, text, barValue)
     if db.colorBar and f.tintOwner then
-        tints[unit] = ns.COLORS[colorKey] or ns.COLORS.unknown
-        applyTint(f.tintKind, f.tintOwner, tints[unit])
-    elseif tints[unit] then
-        tints[unit] = nil
-        restoreTint(f.tintKind, f.tintOwner)
+        tints[unit] = color
+        applyTint(f.tintKind, f.tintOwner, color)
+    else
+        if tints[unit] then
+            tints[unit] = nil
+            restoreTint(f.tintKind, f.tintOwner)
+        end
+        -- Not tinting: the capsule takes whatever color the nameplate bar shows.
+        color = readBarColor(f.tintKind, f.tintOwner) or color
     end
+    ns.PaintCapsule(f, color, text)
 end
 
 local function plateUnit(plate)
@@ -302,11 +326,14 @@ function ns.ShowPreview()
     if not plate then ns.HidePreview(); return false end
     preview = preview or ns.CreateCapsule()
     layout(preview, plate)
-    ns.PaintCapsule(preview, ns.previewState, "70%", 70)
     clearPreviewTint()
     local unit = plateUnit(plate)
+    local color = ns.COLORS[ns.previewState]
+    if not TrisThreatDB.colorBar then
+        color = readBarColor(preview.tintKind, preview.tintOwner) or color
+    end
+    ns.PaintCapsule(preview, color, "70%")
     if TrisThreatDB.colorBar and preview.tintOwner and unit and not active[unit] then
-        local color = ns.COLORS[ns.previewState]
         tints[unit] = color
         previewTint = { unit = unit, kind = preview.tintKind, owner = preview.tintOwner }
         applyTint(preview.tintKind, preview.tintOwner, color)

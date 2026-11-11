@@ -4,7 +4,7 @@
 
 ## What it does
 
-- **Threat capsule:** the threat value as a number and a fill bar, attached to the enemy's nameplate.
+- **Threat capsule:** the threat value as a number, in a tab that grows out of the enemy's health bar and shares its color.
 - **Role-aware colors:** as a tank, green means you hold the enemy. As a damage dealer or healer, green is safe, orange is rising and red means you pulled it. Another tank or your pet holding the enemy shows blue.
 - **Automatic role:** detected from your stance, form, group role or specialization, with a manual override.
 - **Your placement:** move the capsule up to 100 pixels left, right, up or down, and change its size. A preview shows it on your target.

@@ -120,10 +120,13 @@ local function refreshMock()
     if not mock then return end
     local db = TrisThreatDB
     ns.AnchorCapsule(mock.capsule, mock.bar, mock.panel)
+    -- The in-world capsule uses the HIGH strata, which sits below this DIALOG window: lift it into the preview.
+    mock.capsule:SetFrameStrata("DIALOG")
+    mock.capsule:SetFrameLevel(mock.panel:GetFrameLevel() + 10)
     local state = ns.previewState
-    local c = db.colorBar and ns.COLORS[state] or { 0.62, 0.16, 0.16 }
+    local c = db.colorBar and ns.COLORS[state] or { 0.78, 0.12, 0.12 }
     mock.bar:SetStatusBarColor(c[1], c[2], c[3])
-    ns.PaintCapsule(mock.capsule, state, "70%", 70)
+    ns.PaintCapsule(mock.capsule, c, "70%")
     for key, button in pairs(mock.states) do button.selected:SetShown(key == state) end
 end
 
@@ -136,23 +139,27 @@ local function buildMock(parent, y)
     local panel = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     panel:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, y)
     panel:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -16, y)
-    panel:SetHeight(100)
+    panel:SetHeight(150)
     panel:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
     panel:SetBackdropColor(0.09, 0.1, 0.06, 1)
     panel:SetBackdropBorderColor(0.35, 0.29, 0.18, 0.9)
     panel:SetClipsChildren(true)
-    local name = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    local name = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     name:SetText("Blackrock Outrunner")
-    name:SetPoint("TOP", panel, "TOP", 0, -34)
-    local bar = CreateFrame("StatusBar", nil, panel)
-    bar:SetSize(230, 14)
-    bar:SetPoint("TOP", name, "BOTTOM", 0, -3)
-    bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+    name:SetPoint("CENTER", panel, "CENTER", 0, 14)
+    -- Default Blizzard nameplate look: flat dark red bar, black background, 1 px black frame.
+    local frameBox = CreateFrame("Frame", nil, panel, "BackdropTemplate")
+    frameBox:SetSize(242, 18)
+    frameBox:SetPoint("TOP", name, "BOTTOM", 0, -3)
+    frameBox:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+    frameBox:SetBackdropColor(0.05, 0.05, 0.05, 0.9)
+    frameBox:SetBackdropBorderColor(0, 0, 0, 1)
+    local bar = CreateFrame("StatusBar", nil, frameBox)
+    bar:SetPoint("TOPLEFT", 1, -1)
+    bar:SetPoint("BOTTOMRIGHT", -1, 1)
+    bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-TargetingFrame-BarFill")
     bar:SetMinMaxValues(0, 100)
     bar:SetValue(64)
-    local back = bar:CreateTexture(nil, "BACKGROUND")
-    back:SetAllPoints()
-    back:SetColorTexture(0, 0, 0, 0.7)
     local capsule = ns.CreateCapsule()
     mock = { panel = panel, bar = bar, capsule = capsule, states = {} }
 
@@ -188,7 +195,8 @@ local ROLE_TEXT = { tank = "Tank", damage = "Damage dealer", healer = "Healer" }
 local function build()
     frame = CreateFrame("Frame", "TrisThreatOptions", UIParent, "BackdropTemplate")
     stylePanel(frame, 0.035, 0.04, 0.05)
-    frame:SetSize(420, 776)
+    frame:SetSize(420, 826)
+    frame:SetScale(math.min(1, (UIParent:GetHeight() - 40) / 826))
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("DIALOG")
     frame:SetClampedToScreen(true)
@@ -217,7 +225,7 @@ local function build()
     close:SetScript("OnClick", function() frame:Hide() end)
 
     buildMock(frame, -48)
-    local y = -158
+    local y = -208
     checkbox(frame, "Enabled", y, "enabled")
     y = y - 34
 
@@ -269,7 +277,6 @@ local function build()
 
     heading(frame, "Colors", y); y = y - 26
     checkbox(frame, "Color the nameplate by threat", y, "colorBar", function() onLayoutChanged() end); y = y - 26
-    checkbox(frame, "Show fill bar", y, "showBar", function() onLayoutChanged() end); y = y - 26
     checkbox(frame, "Only in instances", y, "onlyInstances"); y = y - 26
     checkbox(frame, "Hide on trivial mobs", y, "hideTrivial"); y = y - 26
     checkbox(frame, "Off-tank color", y, "offTank"); y = y - 28
