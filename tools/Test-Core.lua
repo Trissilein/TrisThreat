@@ -94,3 +94,8 @@ check("strip coerces to top, full bar width, pushes name", st.look == "strip" an
 check("strip bottom", ns.Layout("strip", "bottom", m, db2).points[1][1] == "TOPLEFT")
 local fl = ns.Layout("floating", "right", m, ns.NormalizeDB({ offsetX = 20, offsetY = -10, scale = 2 }))
 check("floating uses offsets and scale", fl.scale == 2 and fl.points[1][4] == 10 and fl.points[1][5] == -3.5)
+
+-- Tank lead: 100 % red, 150 % yellow, 200 % and more green
+check("lead 100 is red", near(ns.LeadColor(100)[1], 0.90) and near(ns.LeadColor(100)[2], 0.15))
+check("lead 150 is yellow", near(ns.LeadColor(150)[1], 0.97))
+check("lead 200+ is green", near(ns.LeadColor(200)[2], 0.85) and near(ns.LeadColor(400)[2], 0.85))

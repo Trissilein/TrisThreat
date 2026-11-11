@@ -149,6 +149,11 @@ function ns.GradientColor(percent, tank)
     return stops[#stops][2]
 end
 
+-- A tank's lead over the next player: 100 % red (about to lose it), 200 % or more green.
+function ns.LeadColor(lead)
+    return ns.GradientColor((tonumber(lead) or 100) - 100, true)
+end
+
 -- Color for a readable percentage; a co-tank or pet holding the mob wins (tank only).
 function ns.ColorForPercent(percent, role, offTank)
     if offTank and role == "tank" then return ns.COLORS.offtank end

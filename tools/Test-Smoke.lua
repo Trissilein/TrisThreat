@@ -129,3 +129,10 @@ ns.UpdateUnit("nameplate1")
 _G.UnitThreatSituation = function() return nil end
 ns.UpdateUnit("nameplate1")
 check("leaving the threat list restores the layout", uf.trisThreatRoom == nil)
+
+-- Tank holding the enemy: strip fill runs on the lead (100..200)
+TrisThreatDB.role = "tank"; TrisThreatDB.mode = "strip"
+_G.UnitThreatSituation = function() return 3 end
+ns.UpdateUnit("nameplate1")
+check("tank strip updates with the lead", true)
+TrisThreatDB.role = "auto"

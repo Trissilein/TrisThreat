@@ -139,15 +139,17 @@ local function setBarColor(bar, color, alpha)
 end
 
 -- color = { r, g, b } (may hold secret numbers); value = threat percentage for the strip fill.
-function ns.PaintElement(el, color, text, value, selected)
+function ns.PaintElement(el, color, text, value, selected, low, high)
     local db = TrisThreatDB
     color = color or ns.COLORS.unknown
     if el.look == "strip" then
         el.fill:Show()
-        el.fill:SetValue(value or 0)
+        el.fill:SetMinMaxValues(low or 0, high or 100)
+        el.fill:SetValue(value or (low or 0))
         setBarColor(el.fill, color)
         el.text:SetShown(db.stripText)
     else
+        el.fill:SetMinMaxValues(0, 100)
         el.fill:SetValue(100)
         if db.colorBackground then
             el.fill:Show()

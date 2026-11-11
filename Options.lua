@@ -373,7 +373,7 @@ local function build()
     checkbox(frame, "Color the nameplate bar", COL1, yl, "colorBar")
     checkbox(frame, "Number on the strip", COL1 + 150, yl, "stripText"); yl = yl - 26
     checkbox(frame, "Off-tank color", COL1, yl, "offTank"); yl = yl - 30
-    local legend = label(frame, "Green at 0 % threat, red at 100 %. As a tank the scale is mirrored: 100 % (you hold it) is green.", "GameFontNormalSmall")
+    local legend = label(frame, "Green at 0 % threat, red at 100 %. As a tank holding the enemy, it follows your lead: full and green with a big lead, shrinking and turning red as the next player closes in.", "GameFontNormalSmall")
     legend:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 2, yl)
     legend:SetWidth(COLW)
     legend:SetJustifyH("LEFT")

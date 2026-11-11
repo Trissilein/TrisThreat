@@ -44,8 +44,8 @@ L["Nameplate offsets in pixels. Positive values move the capsule right and up."]
     "Namensplaketten-Versatz in Pixeln. Positive Werte verschieben die Kapsel nach rechts und oben."
 L["Close"] = "Schließen"
 L["Preview threat"] = "Vorschau Threat"
-L["Green at 0 % threat, red at 100 %. As a tank the scale is mirrored: 100 % (you hold it) is green."] =
-    "Grün bei 0 % Threat, rot bei 100 %. Für Tanks gespiegelt: 100 % (du hältst es) ist grün."
+L["Green at 0 % threat, red at 100 %. As a tank holding the enemy, it follows your lead: full and green with a big lead, shrinking and turning red as the next player closes in."] =
+    "Grün bei 0 % Threat, rot bei 100 %. Als Tank, der den Gegner hält, zählt dein Vorsprung: voll und grün bei großem Vorsprung, kürzer und röter, je näher der Nächste kommt."
 L["Display"] = "Darstellung"
 L["Mode"] = "Modus"
 L["Side"] = "Seite"

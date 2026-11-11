@@ -114,30 +114,33 @@ end
 -- Gradient: a color curve evaluated by the engine, so a secret percentage still gives a color
 ----------------------------------------------------------------------------------------------------
 
-local curves = {}   -- "dps" | "tank" -> color curve (false = unavailable)
+local curves = {}   -- "dps" | "tank" | "lead" -> color curve (false = unavailable)
 
-local function buildCurve(tank)
+-- dps: scaled 0 green -> 100 red. tank: mirrored. lead: a tank's lead over the next player,
+-- 100 % (about to lose it) red -> 200 % (twice the next player's threat) green.
+local function buildCurve(kind)
     if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return false end
     local ok, curve = pcall(C_CurveUtil.CreateColorCurve)
     if not ok or not curve then return false end
     pcall(function()
         if curve.SetType and Enum and Enum.LuaCurveType then curve:SetType(Enum.LuaCurveType.Linear) end
+        local offset = kind == "lead" and 100 or 0
         for _, stop in ipairs(ns.GRADIENT_STOPS) do
-            local c = ns.GradientColor(tank and (100 - stop[1]) or stop[1], false)
-            curve:AddPoint(stop[1], CreateColor(c[1], c[2], c[3], 1))
+            local c = ns.GradientColor(stop[1], kind ~= "dps")
+            curve:AddPoint(stop[1] + offset, CreateColor(c[1], c[2], c[3], 1))
         end
-        -- Values above 100 (raw percentages can exceed it) keep the end color instead of extrapolating.
-        local last = ns.GradientColor(tank and 0 or 100, false)
-        curve:AddPoint(1000, CreateColor(last[1], last[2], last[3], 1))
+        -- Beyond the last stop (raw percentages and leads can exceed it) keep the end color.
+        local last = ns.GradientColor(100, kind ~= "dps")
+        curve:AddPoint(10000, CreateColor(last[1], last[2], last[3], 1))
     end)
     return curve
 end
 
 -- Returns { r, g, b } (the numbers may be secret values) or nil when the curve cannot be evaluated.
-local function curveColor(role, value)
+local function curveColor(key, value)
     if value == nil then return nil end
-    local key = role == "tank" and "tank" or "dps"
-    if curves[key] == nil then curves[key] = buildCurve(key == "tank") end
+    if key ~= "lead" then key = key == "tank" and "tank" or "dps" end
+    if curves[key] == nil then curves[key] = buildCurve(key) end
     local curve = curves[key]
     if not curve then return nil end
     local ok, color = pcall(curve.Evaluate, curve, value)
@@ -240,8 +243,20 @@ function ns.UpdateUnit(unit)
     local offTank = status ~= false and db.offTank and role == "tank" and status < 3 and otherHolds(unit)
     local color = ns.COLORS[ns.StatusColorKey(status, role, offTank)] or ns.COLORS.unknown
     local _, _, scaled = UnitDetailedThreatSituation("player", unit)
+    -- Strip fill: value on [low, high]. Secret numbers are fine, the engine computes the fill.
+    local fill, low, high = scaled, 0, 100
+    local holding = role == "tank" and status ~= false and status >= 2
     if offTank then
         color = ns.COLORS.offtank
+    elseif holding and UnitThreatPercentageOfLead then
+        -- Tanking: full and green with a big lead, shrinking and turning red as the next player closes in.
+        local lead = UnitThreatPercentageOfLead("player", unit)
+        if lead ~= nil then
+            fill, low, high = lead, 100, 200
+            color = curveColor("lead", lead) or color
+        end
+    elseif role == "tank" then
+        color = ns.COLORS.bad -- a tank that lost the enemy: red, the fill shows how close it is to taking it back
     elseif scaled ~= nil then
         color = curveColor(role, scaled) or color
     end
@@ -252,7 +267,7 @@ function ns.UpdateUnit(unit)
     if el.parts and el.parts.uf ~= parts.uf and el.parts.blizzard then ns.SyncRoom(el.parts.uf, nil) end
     el.parts = parts
     ns.Arrange(el, parts)
-    ns.PaintElement(el, color, readValue(unit, db.value, status), scaled, isTargetPlate(plate))
+    ns.PaintElement(el, color, readValue(unit, db.value, status), fill, isTargetPlate(plate), low, high)
 
     if db.colorBar and parts.blizzard then
         tints[unit] = color
