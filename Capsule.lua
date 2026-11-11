@@ -194,6 +194,9 @@ local function buildCurve(tank)
             local c = ns.GradientColor(tank and (100 - stop[1]) or stop[1], false)
             curve:AddPoint(stop[1], CreateColor(c[1], c[2], c[3], 1))
         end
+        -- Values above 100 (raw percentages can exceed it) keep the end color instead of extrapolating.
+        local last = ns.GradientColor(tank and 0 or 100, false)
+        curve:AddPoint(1000, CreateColor(last[1], last[2], last[3], 1))
     end)
     return curve
 end
