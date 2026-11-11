@@ -136,7 +136,12 @@ def icon():
     shine = Image.new("RGBA", (N, N), (0, 0, 0, 0))
     ImageDraw.Draw(shine).ellipse((c - 46 * s, c - 58 * s, c + 46 * s, c - 6 * s), fill=(255, 255, 255, 26))
     big = Image.alpha_composite(big, shine)
-    return big.resize((size, size), Image.LANCZOS)
+    # 8 px transparent margin: in Titan Panel and the minimap the disc then matches the visual size of other
+    # launcher icons (a full-bleed disc looked bigger and hung below the text line).
+    inner = size - 16
+    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    out.alpha_composite(big.resize((inner, inner), Image.LANCZOS), (8, 8))
+    return out
 
 
 def main():
