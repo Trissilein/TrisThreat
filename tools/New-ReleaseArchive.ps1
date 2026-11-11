@@ -1,0 +1,72 @@
+param(
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern('\A[0-9]+\.[0-9]+\.[0-9]+\z')]
+    [string]$Version
+)
+
+$ErrorActionPreference = 'Stop'
+$root = Split-Path -Parent $PSScriptRoot
+$releaseDirectory = Join-Path $root 'release'
+$stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('tristhreat-release-' + [guid]::NewGuid().ToString('N'))
+$addonDirectory = Join-Path $stagingRoot 'TrisThreat'
+$archive = Join-Path $releaseDirectory "TrisThreat-$Version.zip"
+$tocPath = Join-Path $root 'TrisThreat.toc'
+
+# Runtime files = the TOC itself + every non-metadata TOC line (so a new .lua can never be forgotten).
+$tocFiles = @(foreach ($toc in 'TrisThreat.toc', 'TrisThreat_Camelot.toc') {
+    Get-Content -LiteralPath (Join-Path $root $toc) | ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object { $_ -replace '\\', '/' }
+})
+$runtimeFiles = @('TrisThreat.toc', 'TrisThreat_Camelot.toc') + $tocFiles
+# Only game-loadable assets ship; source PNGs live in docs/branding/.
+$assetsRoot = Join-Path $root 'Assets'
+$assetFiles = @(Get-ChildItem -LiteralPath $assetsRoot -File |
+    Where-Object { $_.Extension -in '.ogg', '.tga' } | ForEach-Object { "Assets/$($_.Name)" })
+# Skin textures: Assets/skin/<skin>/*.tga, subfolders preserved.
+$skinRoot = Join-Path $assetsRoot 'skin'
+if (Test-Path -LiteralPath $skinRoot) {
+    $assetFiles += @(Get-ChildItem -LiteralPath $skinRoot -File -Recurse -Filter '*.tga' |
+        ForEach-Object { 'Assets/skin/' + ($_.FullName.Substring($skinRoot.Length).TrimStart('\', '/') -replace '\\', '/') })
+}
+$expected = @($runtimeFiles + $assetFiles | Sort-Object -Unique)
+
+try {
+    New-Item -ItemType Directory -Path $addonDirectory -Force | Out-Null
+    New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
+    foreach ($file in $expected) {
+        $source = Join-Path $root $file
+        if (-not (Test-Path -LiteralPath $source)) { throw "TOC/asset entry is missing on disk: $file" }
+        $target = Join-Path $addonDirectory $file
+        New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
+        Copy-Item -LiteralPath $source -Destination $target -Force
+    }
+    if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+    Compress-Archive -LiteralPath $addonDirectory -DestinationPath $archive -CompressionLevel Optimal
+
+    # Gate: every TOC entry must be inside the ZIP (and nothing unexpected).
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($archive)
+    try {
+        $entries = @($zip.Entries | Where-Object { $_.Name } |
+            ForEach-Object { ($_.FullName -replace '\\', '/') -replace '^TrisThreat/', '' })
+    }
+    finally { $zip.Dispose() }
+    $missing = @($expected | Where-Object { $entries -notcontains $_ })
+    $extra = @($entries | Where-Object { $expected -notcontains $_ })
+    if ($missing.Count -or $extra.Count) {
+        Remove-Item -LiteralPath $archive -Force
+        throw "ZIP content mismatch. Missing: [$($missing -join ', ')] Unexpected: [$($extra -join ', ')]"
+    }
+    Write-Output $archive
+}
+finally {
+    if (Test-Path -LiteralPath $stagingRoot) {
+        $resolvedStaging = [System.IO.Path]::GetFullPath($stagingRoot)
+        $resolvedTemp = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\', '/')
+        if ((Split-Path -Parent $resolvedStaging) -ne $resolvedTemp -or
+            (Split-Path -Leaf $resolvedStaging) -notmatch '^tristhreat-release-[0-9a-f]{32}$') {
+            throw "Refusing cleanup outside the release staging directory: $resolvedStaging"
+        }
+        Remove-Item -LiteralPath $resolvedStaging -Recurse -Force
+    }
+}

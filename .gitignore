@@ -1,0 +1,18 @@
+# WoW runtime data
+WTF/
+SavedVariables/
+Interface/
+*.bak
+*.tmp
+*.orig
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local release artifacts and agent working files
+release/
+.agents/
+tools/build-dependencies/node_modules/

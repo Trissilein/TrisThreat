@@ -1,0 +1,22 @@
+## Interface: 16001
+## X-Compatible-With: forever
+## Title: TrisThreat
+## Notes: A small capsule on every enemy nameplate that shows how much threat you hold on that mob.
+## Author: Ingo
+## Version: 0.1.0
+## IconTexture: Interface\AddOns\TrisThreat\Assets\TrisThreatIcon.tga
+## SavedVariables: TrisThreatDB
+## OptionalDeps: LibStub, CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon-1.0
+## AddonCompartmentFunc: TrisThreat_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: TrisThreat_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: TrisThreat_OnAddonCompartmentLeave
+Libs/LibStub/LibStub.lua
+Libs/CallbackHandler-1.0/CallbackHandler-1.0.lua
+Libs/LibDataBroker-1.1/LibDataBroker-1.1.lua
+Libs/LibDBIcon-1.0/LibDBIcon-1.0.lua
+Locales/enUS.lua
+Locales/deDE.lua
+Core.lua
+Capsule.lua
+Options.lua
+Launcher.lua
