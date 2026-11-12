@@ -106,7 +106,7 @@ ns.ToggleOptions()
 check("options window builds and opens", calls.Show ~= nil)
 
 local AdjustBefore = calls.AdjustPointsOffset or 0
-for _, mode in ipairs({ "badge", "strip", "floating" }) do
+for _, mode in ipairs({ "badge", "segment", "strip", "floating" }) do
     for _, side in ipairs({ "left", "right", "top", "bottom" }) do
         TrisThreatDB.mode, TrisThreatDB.side = mode, side
         ns.RefreshOptions()
@@ -136,7 +136,7 @@ dragTo((l + r) / 2, (b + t) / 2)
 check("dropping on the badge-left spot snaps there", TrisThreatDB.mode == "badge" and TrisThreatDB.side == "left")
 l, b, r, t = ns.MockZoneRect(ns.MOCK_ZONES[7])
 dragTo((l + r) / 2, (b + t) / 2)
-check("dropping inside the bar's left end sets the 80 % badge there", TrisThreatDB.mode == "floating" and TrisThreatDB.offsetX == 2 and TrisThreatDB.scale == 0.8)
+check("dropping inside the bar's left end makes the segment", TrisThreatDB.mode == "segment" and TrisThreatDB.side == "left")
 dragTo(600, 130)
 check("dropping elsewhere places freely, far to the right", TrisThreatDB.mode == "floating" and TrisThreatDB.offsetX > 150)
 TrisThreatDB.mode, TrisThreatDB.side, TrisThreatDB.offsetX, TrisThreatDB.offsetY = "badge", "right", 0, 0

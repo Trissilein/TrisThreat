@@ -5,7 +5,7 @@ local frame
 local controls = {}       -- refresh functions
 local floatingOnly = {}   -- controls enabled only in floating mode
 
-local WIDTH, HEIGHT = 660, 640
+local WIDTH, HEIGHT = 660, 566
 local COL1, COL2, COLW = 16, 342, 302
 
 -- Same look as the WoWraVox window: dark marble panel, gold corners, thin brown rules.
@@ -51,7 +51,7 @@ end
 local TIPS = {
     ["Make room (move nameplate elements aside)"] = "Moves the nameplate's name, raid icon, elite dragon, crowd-control icons or health text aside so nothing overlaps the element. Blizzard nameplates only.",
     ["Color the number"] = "The threat number takes the threat color (green at 0 %, red at 100 %).",
-    ["Color the background"] = "The badge background takes the threat color. With a colored number as well, the background uses a darker shade so the number stays readable.",
+    ["Color the background"] = "The badge or segment background takes the threat color. With a colored number as well, the background uses a darker shade so the number stays readable.",
     ["Color the nameplate bar"] = "Tints the enemy's health bar itself with the threat color. Blizzard nameplates only.",
     ["Number on the strip"] = "Strip mode only: shows the threat number next to the right end of the thin threat bar. Off = the bar alone.",
     ["Role"] = "Decides the color direction. Automatic detects tanks by stance, form or aura, then by group role or specialization. As a tank, holding the enemy is green; otherwise it is red.",
@@ -370,7 +370,6 @@ local function buildMock(parent, y)
             if active then
                 local z = active.zone
                 mode, side = z.mode, z.side or db.side
-                if z.offsetX then nx, ny, scale = z.offsetX, z.offsetY, z.scale end
                 mock.caption:SetText(L[z.text] or z.text)
             else
                 nx, ny = ns.MockFreeOffsets(px, py, db.scale)
@@ -496,7 +495,7 @@ local function build()
     local drag = label(frame, "Drag the element in the preview. Dots mark where it snaps: to a badge position, or into the strip above or below the bar. Anywhere else places it freely.", "GameFontNormalSmall")
     drag:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 2, yl + 4)
     drag:SetWidth(COLW)
-    drag:SetJustifyH("LEFT"); yl = yl - 56
+    drag:SetJustifyH("LEFT"); yl = yl - 48
     checkbox(frame, "Make room (move nameplate elements aside)", COL1, yl, "makeRoom"); yl = yl - 34
 
     heading(frame, "Colors", COL1, yl); yl = yl - 24
@@ -519,7 +518,7 @@ local function build()
     dropdown(frame, "Role", COL2, yr, "role", {
         { value = "auto", text = "Automatic" }, { value = "tank", text = "Tank" },
         { value = "damage", text = "Damage dealer" }, { value = "healer", text = "Healer" },
-    }); yr = yr - 26
+    }); yr = yr - 36 -- the dropdown frame is taller than its row: leave room so the text below is not covered
     ns.detectedText = label(frame, "", "GameFontNormalSmall")
     ns.detectedText:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2 + 2, yr)
     ns.detectedText:SetWidth(COLW)
