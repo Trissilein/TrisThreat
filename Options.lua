@@ -142,8 +142,8 @@ local function dropdown(parent, text, x, y, key, choices)
     local fs = label(parent, text)
     fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 2, y - 6)
     local dd = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
-    dd:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 92, y + 2)
-    UIDropDownMenu_SetWidth(dd, COLW - 128)
+    dd:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 64, y + 2)
+    UIDropDownMenu_SetWidth(dd, COLW - 106)
     local function textOf(value)
         for _, choice in ipairs(choices) do if choice.value == value then return L[choice.text] or choice.text end end
         return ""
@@ -377,12 +377,13 @@ local function build()
     checkbox(frame, "Make room (move nameplate elements aside)", COL1, yl, "makeRoom"); yl = yl - 34
 
     heading(frame, "Colors", COL1, yl); yl = yl - 24
-    checkbox(frame, "Color the number", COL1, yl, "colorText")
-    checkbox(frame, "Color the background", COL1 + 150, yl, "colorBackground"); yl = yl - 26
-    checkbox(frame, "Color the nameplate bar", COL1, yl, "colorBar")
-    checkbox(frame, "Number on the strip", COL1 + 150, yl, "stripText"); yl = yl - 26
-    checkbox(frame, "Off-tank color", COL1, yl, "offTank")
-    checkbox(frame, "Aggro warning glow", COL1 + 150, yl, "glow"); yl = yl - 30
+    -- One checkbox per row: two columns clipped the longer labels under their neighbour.
+    for _, c in ipairs({ { "Color the number", "colorText" }, { "Color the background", "colorBackground" },
+        { "Color the nameplate bar", "colorBar" }, { "Number on the strip", "stripText" },
+        { "Off-tank color", "offTank" }, { "Aggro warning glow", "glow" } }) do
+        checkbox(frame, c[1], COL1, yl, c[2]); yl = yl - 24
+    end
+    yl = yl - 6
     local legend = label(frame, "Green at 0 % threat, red at 100 %. As a tank holding the enemy, it follows your lead: full and green with a big lead, shrinking and turning red as the next player closes in.", "GameFontNormalSmall")
     legend:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 2, yl)
     legend:SetWidth(COLW)
@@ -396,7 +397,9 @@ local function build()
         { value = "damage", text = "Damage dealer" }, { value = "healer", text = "Healer" },
     }); yr = yr - 26
     ns.detectedText = label(frame, "", "GameFontNormalSmall")
-    ns.detectedText:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2 + 112, yr)
+    ns.detectedText:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2 + 2, yr)
+    ns.detectedText:SetWidth(COLW)
+    ns.detectedText:SetJustifyH("LEFT")
     yr = yr - 18
     dropdown(frame, "Value", COL2, yr, "value", {
         { value = "scaled", text = "Threat to pull aggro (scaled)" },
