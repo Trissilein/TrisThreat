@@ -10,7 +10,6 @@ ns.OFFSET_LIMIT = 100
 ns.defaults = {
     enabled = true,
     role = "auto",       -- auto | tank | damage | healer
-    value = "scaled",    -- scaled | raw | lead
     offsetX = 0,
     offsetY = 0,
     scale = 1,
@@ -24,11 +23,9 @@ ns.defaults = {
     colorBar = false,    -- also tint the nameplate health bar
     onlyInstances = false,
     hideTrivial = true,
-    offTank = true,
     minimap = { hide = false },
 }
 
-local VALUE_MODES = { scaled = true, raw = true, lead = true }
 local ROLE_CHOICES = { auto = true, tank = true, damage = true, healer = true }
 local DISPLAY_MODES = { floating = true, badge = true, segment = true, strip = true }
 local SIDES = { left = true, right = true, top = true, bottom = true }
@@ -49,17 +46,17 @@ function ns.NormalizeDB(db)
     local d = ns.defaults
     db.enabled = db.enabled ~= false
     db.role = ROLE_CHOICES[db.role] and db.role or d.role
-    db.value = VALUE_MODES[db.value] and db.value or d.value
     db.offsetX = ns.ClampOffset(db.offsetX)
     db.offsetY = ns.ClampOffset(db.offsetY)
     db.scale = clamp(db.scale, 0.5, 2, 1)
     db.mode = DISPLAY_MODES[db.mode] and db.mode or d.mode
     db.side = SIDES[db.side] and db.side or d.side
-    for _, key in ipairs({ "makeRoom", "colorText", "colorBackground", "stripText", "glow", "colorBar", "hideTrivial", "offTank" }) do
+    for _, key in ipairs({ "makeRoom", "colorText", "colorBackground", "stripText", "glow", "colorBar", "hideTrivial" }) do
         if db[key] == nil then db[key] = d[key] end
         db[key] = db[key] == true
     end
     db.onlyInstances = db.onlyInstances == true
+    db.value, db.offTank = nil, nil -- retired settings: the number is chosen automatically, off-tank color is always on
     db.minimap = type(db.minimap) == "table" and db.minimap or {}
     db.minimap.hide = db.minimap.hide == true
     return db

@@ -7,6 +7,6 @@
 - Continuous color grading from green (0 %) over yellow to red (100 %), for tanks driven by the lead over the next player (the strip is full and green with a big lead and shrinks and reddens as it melts), evaluated on a color curve so secret threat values work. Automatic role detection with a manual override; blue off-tank color when another tank or your pet holds the enemy. `/tt probe` reports whether the curve works on your client.
 - Display modes in Blizzard's nameplate art: badge (like the level badge, left/right/top/bottom), segment in the health bar, strip above/below the bar, or a freely placed element (offsets up to 100 pixels, size). Optional make-room moves name, raid icon and crowd-control icons aside.
 - Color combinations: number, background, nameplate bar.
-- Settings window with a live copy of the Blizzard nameplate, value mode and filters; while it is open, your target gets a test element without combat.
+- Settings window with a live copy of the Blizzard nameplate and filters; while it is open, your target gets a test element without combat.
 - Titan Panel / LibDataBroker display showing the current mode (Tank, DPS or Healer mode; * = set by hand), addon compartment entry and a minimap icon that can be hidden with a right-click.
 - WoW Forever (beta) only; there is no Retail build.

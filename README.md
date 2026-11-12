@@ -12,6 +12,7 @@ WoW Forever compatibility (beta): interface **16001** (`TrisThreat_Camelot.toc`)
 
 - A threat element on each enemy nameplate that fights you, with the threat value (for example `70%`).
 - The color grades continuously with your threat, one step per percent: green at 0 %, yellow at 50 %, red at 100 %. As a tank holding the enemy it follows your lead over the next player instead: full and green with a big lead, shrinking and turning red as they close in.
+- The number is chosen automatically: threat to pull aggro (0 to 100 %) while you do not hold the enemy, your lead over the next player (above 100 %) while you hold it as a tank.
 - Role detection is automatic (stance, form or aura of a tank, then the assigned group role, then your specialization role; on WoW Forever a Warrior or Paladin is a tank when a shield is equipped and no other tank is in the group, whatever aura or stance is active; the tooltip and the settings show which rule decided) and can be overridden in the settings.
 - When another tank or your pet holds the enemy, the element turns blue instead of red (tank only).
 - Four display modes in Blizzard's own nameplate art: a second level badge (left, right, top or bottom of the health bar), a segment inside the bar's end, a thin strip above or below the bar whose fill is your threat, or a freely placed element you move up to 100 pixels in every direction. Integrated modes can move the name, raid icon and crowd-control icons aside to make room.

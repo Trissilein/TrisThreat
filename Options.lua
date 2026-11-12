@@ -56,9 +56,7 @@ local TIPS = {
     ["Color the background"] = "The badge or segment background takes the threat color. With a colored number as well, the background uses a darker shade so the number stays readable.",
     ["Color the nameplate bar"] = "Tints the enemy's health bar itself with the threat color. Blizzard nameplates only.",
     ["Number on the strip"] = "Strip mode only: shows the threat number next to the right end of the thin threat bar. Off = the bar alone.",
-    ["Off-tank color"] = "As a tank: when another tank or your pet holds the enemy, show blue instead of red.",
     ["Role"] = "Decides the color direction. Automatic detects tanks by stance, form or aura, then by group role or specialization. As a tank, holding the enemy is green; otherwise it is red.",
-    ["Value"] = "Scaled: 100 % = you pull aggro. Raw: your share of the current tank's threat (can exceed 100 %). Lead: as a tank, your lead over the next player.",
     ["Size"] = "Free placement only: scales it from half to double size.",
     ["Reset position"] = "Free placement only: back to the bar's top-left corner at normal size.",
     ["Enabled"] = "Turns TrisThreat on or off.",
@@ -401,7 +399,7 @@ local function build()
     -- One checkbox per row: two columns clipped the longer labels under their neighbour.
     for _, c in ipairs({ { "Color the number", "colorText" }, { "Color the background", "colorBackground" },
         { "Color the nameplate bar", "colorBar" }, { "Number on the strip", "stripText" },
-        { "Off-tank color", "offTank" }, { "Aggro warning glow", "glow" } }) do
+        { "Aggro warning glow", "glow" } }) do
         checkbox(frame, c[1], COL1, yl, c[2]); yl = yl - 24
     end
     yl = yl - 6
@@ -422,11 +420,7 @@ local function build()
     ns.detectedText:SetWidth(COLW)
     ns.detectedText:SetJustifyH("LEFT")
     yr = yr - 18
-    dropdown(frame, "Value", COL2, yr, "value", {
-        { value = "scaled", text = "Threat to pull aggro (scaled)" },
-        { value = "raw", text = "Share of the tank's threat (raw)" },
-        { value = "lead", text = "Lead over the next player (tank)" },
-    }); yr = yr - 40
+    yr = yr - 22
 
     heading(frame, "Free placement", COL2, yr); yr = yr - 26
     local drag = label(frame, "Drag the element in the preview above to place it.", "GameFontNormalSmall")

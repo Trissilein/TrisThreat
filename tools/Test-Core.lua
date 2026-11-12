@@ -5,11 +5,11 @@ end
 
 -- Normalize: defaults, repair, clamp, idempotent
 local db = ns.NormalizeDB(nil)
-check("empty db gets defaults", db.enabled and db.role == "auto" and db.value == "scaled" and db.offsetX == 0
+check("empty db gets defaults", db.enabled and db.role == "auto" and db.offsetX == 0
     and db.scale == 1 and db.minimap.hide == false and db.colorBar == false)
-local bad = ns.NormalizeDB({ role = "x", value = "y", offsetX = 500, offsetY = -500, scale = 9, hideTrivial = false,
+local bad = ns.NormalizeDB({ role = "x", offsetX = 500, offsetY = -500, scale = 9, hideTrivial = false,
     minimap = { hide = true } })
-check("bad values are repaired", bad.role == "auto" and bad.value == "scaled" and bad.offsetX == 100
+check("bad values are repaired", bad.role == "auto" and bad.offsetX == 100
     and bad.offsetY == -100 and bad.scale == 2)
 check("explicit false and minimap hide survive", bad.hideTrivial == false and bad.minimap.hide == true)
 local twice = ns.NormalizeDB(ns.NormalizeDB({ offsetX = 12.4 }))

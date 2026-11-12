@@ -184,15 +184,6 @@ local function formatPercent(value, prefix)
     return (prefix or "") .. math.floor(value + 0.5) .. "%"
 end
 
--- Returns the display text. Secret numbers go straight to the engine (SetText).
-local function readValue(unit, mode, status)
-    if mode == "lead" and status == 3 and UnitThreatPercentageOfLead then
-        return formatPercent(UnitThreatPercentageOfLead("player", unit), "+")
-    end
-    local _, _, scaled, raw = UnitDetailedThreatSituation("player", unit)
-    return formatPercent((mode == "raw") and raw or scaled)
-end
-
 local function holds(tankUnit, unit)
     if not UnitExists(tankUnit) then return false end
     local status = UnitThreatSituation(tankUnit, unit)
@@ -272,11 +263,12 @@ function ns.UpdateUnit(unit)
     if status == nil then release(unit); return end
 
     local role = ns.GetRole()
-    local offTank = status ~= false and db.offTank and role == "tank" and status < 3 and otherHolds(unit)
+    local offTank = status ~= false and role == "tank" and status < 3 and otherHolds(unit)
     local color = ns.COLORS[ns.StatusColorKey(status, role, offTank)] or ns.COLORS.unknown
     local _, _, scaled = UnitDetailedThreatSituation("player", unit)
     -- Strip fill: value on [low, high]. Secret numbers are fine, the engine computes the fill.
     local fill, low, high = scaled, 0, 100
+    local text = formatPercent(scaled) -- 0..100, 100 % = the aggro changes hands
     local holding = role == "tank" and status ~= false and status >= 2
     if offTank then
         color = ns.COLORS.offtank
@@ -294,6 +286,7 @@ function ns.UpdateUnit(unit)
             color = ns.COLORS.good
         elseif lead ~= nil then
             fill, low, high = lead, 100, 200
+            text = formatPercent(lead) -- holding it as a tank: how far you lead the next player
             color = curveColor("lead", lead) or color
         end
     elseif role == "tank" then
@@ -310,7 +303,7 @@ function ns.UpdateUnit(unit)
     ns.Arrange(el, parts)
     -- Aggro warning: a tank lost the enemy (and no co-tank has it), or anybody else pulled it.
     local warn = status ~= false and ((role == "tank" and status <= 1 and not offTank) or (role ~= "tank" and status >= 2))
-    ns.PaintElement(el, color, readValue(unit, db.value, status), fill, isTargetPlate(plate), low, high, warn)
+    ns.PaintElement(el, color, text, fill, isTargetPlate(plate), low, high, warn)
 
     if db.colorBar and parts.blizzard then
         tints[unit] = color
