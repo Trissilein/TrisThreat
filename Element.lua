@@ -60,17 +60,16 @@ function ns.CreateElement()
     return el
 end
 
--- Broad glow around the WHOLE nameplate (name, icons, badge, bar): a pulsing, fading frame of plain white
--- strips (no texture file that might be missing). Used for the red aggro warning and the green safe target.
+-- Glow along the outline of the health bar: a thick, bright, smoothly fading halo made of 1 px strips of plain
+-- white (no texture file that might be missing), pulsing. Red for the aggro warning, green for the safe target.
 ns.GLOW_RED, ns.GLOW_GREEN = { 1, 0.12, 0.05 }, { 0.18, 0.85, 0.30 }
-local GLOW_LAYERS, GLOW_STEP = 10, 3
--- How far the glowing frame reaches beyond the health bar: left (elite dragon), right (level badge, portrait), top (name, icons), bottom.
-local GLOW_MARGIN = { left = 40, right = 64, top = 46, bottom = 10 }
+local GLOW_LAYERS, GLOW_STEP = 26, 1
+local GLOW_GAP = 2 -- starts just outside the bar's own border
 
 function ns.CreateBroadGlow(color)
     local f = CreateFrame("Frame", nil, UIParent)
     for i = 1, GLOW_LAYERS do
-        local alpha = 0.75 * (1 - (i - 1) / GLOW_LAYERS) ^ 2 -- brightest next to the plate, fading outwards
+        local alpha = 1.0 * (1 - (i - 1) / GLOW_LAYERS) ^ 1.7 -- full strength at the bar, fading smoothly outwards
         local d0, d1 = (i - 1) * GLOW_STEP, i * GLOW_STEP
         local function strip(p1, rel1, x1, y1, p2, rel2, x2, y2)
             local t = f:CreateTexture(nil, "BACKGROUND")
@@ -98,10 +97,11 @@ function ns.PlaceBroadGlow(g, parts)
     local parent = parts.uf
     g:SetParent(parent)
     g:SetFrameStrata(parent:GetFrameStrata())
-    g:SetFrameLevel(parent:GetFrameLevel())
+    -- On real plates one level behind the plate's own art, so the name and icons stay on top of the light.
+    g:SetFrameLevel(parts.mock and parent:GetFrameLevel() or math.max(0, parent:GetFrameLevel() - 1))
     g:ClearAllPoints()
-    g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -GLOW_MARGIN.left, GLOW_MARGIN.top)
-    g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", GLOW_MARGIN.right, -GLOW_MARGIN.bottom)
+    g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -GLOW_GAP, GLOW_GAP)
+    g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", GLOW_GAP, -GLOW_GAP)
 end
 
 -- A glow kept on `owner[key]` (an element, so each plate has its own).
