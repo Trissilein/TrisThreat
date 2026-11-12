@@ -57,49 +57,65 @@ function ns.CreateElement()
     el.text = el.top:CreateFontString(nil, "OVERLAY")
     el.text:SetTextColor(1, 1, 1, 1)
 
-    -- Aggro warning: a red halo behind the element that pulses.
-    el.glow = el:CreateTexture(nil, "BACKGROUND", nil, -8)
-    el.glow:SetTexture("Interface\\GLUES\\Models\\UI_Draenei\\GenericGlow64")
-    el.glow:SetBlendMode("ADD")
-    el.glow:SetVertexColor(1, 0.12, 0.05, 1)
-    el.glow:SetPoint("TOPLEFT", el, "TOPLEFT", -12, 10)
-    el.glow:SetPoint("BOTTOMRIGHT", el, "BOTTOMRIGHT", 12, -10)
-    el.glow:Hide()
-    el.pulse = el.glow:CreateAnimationGroup()
-    el.pulse:SetLooping("BOUNCE")
-    local fade = el.pulse:CreateAnimation("Alpha")
-    fade:SetFromAlpha(0.3)
-    fade:SetToAlpha(1)
-    fade:SetDuration(0.45)
     return el
 end
 
--- Safe-target halo: a green pulsing glow around a plate's health bar (separate from the element, which is
--- hidden on enemies you are not on the threat list of).
-function ns.CreateSafeGlow()
-    local g = CreateFrame("Frame", nil, UIParent)
-    g.tex = g:CreateTexture(nil, "BACKGROUND", nil, -8)
-    g.tex:SetTexture("Interface\\GLUES\\Models\\UI_Draenei\\GenericGlow64")
-    g.tex:SetBlendMode("ADD")
-    g.tex:SetVertexColor(0.18, 0.85, 0.30, 1)
-    g.tex:SetAllPoints()
-    g.pulse = g.tex:CreateAnimationGroup()
-    g.pulse:SetLooping("BOUNCE")
-    local fade = g.pulse:CreateAnimation("Alpha")
-    fade:SetFromAlpha(0.35)
-    fade:SetToAlpha(0.95)
-    fade:SetDuration(0.8)
-    return g
+-- Broad glow around the WHOLE nameplate (name, icons, badge, bar): a pulsing, fading frame of plain white
+-- strips (no texture file that might be missing). Used for the red aggro warning and the green safe target.
+ns.GLOW_RED, ns.GLOW_GREEN = { 1, 0.12, 0.05 }, { 0.18, 0.85, 0.30 }
+local GLOW_LAYERS, GLOW_STEP = 10, 3
+-- How far the glowing frame reaches beyond the health bar: left (elite dragon), right (level badge, portrait), top (name, icons), bottom.
+local GLOW_MARGIN = { left = 40, right = 64, top = 46, bottom = 10 }
+
+function ns.CreateBroadGlow(color)
+    local f = CreateFrame("Frame", nil, UIParent)
+    for i = 1, GLOW_LAYERS do
+        local alpha = 0.75 * (1 - (i - 1) / GLOW_LAYERS) ^ 2 -- brightest next to the plate, fading outwards
+        local d0, d1 = (i - 1) * GLOW_STEP, i * GLOW_STEP
+        local function strip(p1, rel1, x1, y1, p2, rel2, x2, y2)
+            local t = f:CreateTexture(nil, "BACKGROUND")
+            t:SetTexture(WHITE)
+            t:SetBlendMode("ADD")
+            t:SetVertexColor(color[1], color[2], color[3], alpha)
+            t:SetPoint(p1, f, rel1, x1, y1)
+            t:SetPoint(p2, f, rel2, x2, y2)
+        end
+        strip("BOTTOMLEFT", "TOPLEFT", -d1, d0, "TOPRIGHT", "TOPRIGHT", d1, d1)           -- top, with the corners
+        strip("TOPLEFT", "BOTTOMLEFT", -d1, -d0, "BOTTOMRIGHT", "BOTTOMRIGHT", d1, -d1)   -- bottom, with the corners
+        strip("TOPRIGHT", "TOPLEFT", -d0, d0, "BOTTOMLEFT", "BOTTOMLEFT", -d1, -d0)       -- left side
+        strip("TOPLEFT", "TOPRIGHT", d0, d0, "BOTTOMRIGHT", "BOTTOMRIGHT", d1, -d0)       -- right side
+    end
+    f.pulse = f:CreateAnimationGroup()
+    f.pulse:SetLooping("BOUNCE")
+    local fade = f.pulse:CreateAnimation("Alpha")
+    fade:SetFromAlpha(0.4)
+    fade:SetToAlpha(1)
+    fade:SetDuration(0.55)
+    return f
 end
 
-function ns.PlaceSafeGlow(g, parts)
+function ns.PlaceBroadGlow(g, parts)
     local parent = parts.uf
     g:SetParent(parent)
     g:SetFrameStrata(parent:GetFrameStrata())
-    g:SetFrameLevel(parent:GetFrameLevel() + 55)
+    g:SetFrameLevel(parent:GetFrameLevel())
     g:ClearAllPoints()
-    g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -16, 12)
-    g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", 16, -12)
+    g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -GLOW_MARGIN.left, GLOW_MARGIN.top)
+    g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", GLOW_MARGIN.right, -GLOW_MARGIN.bottom)
+end
+
+-- A glow kept on `owner[key]` (an element, so each plate has its own).
+function ns.ShowBroadGlow(owner, key, color, parts)
+    local g = owner[key]
+    if not g then g = ns.CreateBroadGlow(color); owner[key] = g end
+    ns.PlaceBroadGlow(g, parts)
+    g:Show()
+    if not g.pulse:IsPlaying() then g.pulse:Play() end
+end
+
+function ns.HideBroadGlow(owner, key)
+    local g = owner and owner[key]
+    if g then g.pulse:Stop(); g:Hide() end
 end
 
 -- Switches the regions to one look. Only runs when the look or side changes.
@@ -217,12 +233,10 @@ function ns.PaintElement(el, color, text, value, selected, low, high, glow)
         el.text:SetTextColor(1, 1, 1, 1)
     end
     el.selected:SetShown(selected == true and (el.look == "badge") and el.selected:GetAtlas() ~= nil)
-    if glow and db.glow then
-        el.glow:Show()
-        if not el.pulse:IsPlaying() then el.pulse:Play() end
+    if glow and db.glow and el.parts then
+        ns.ShowBroadGlow(el, "warnGlow", ns.GLOW_RED, el.parts)
     else
-        el.pulse:Stop()
-        el.glow:Hide()
+        ns.HideBroadGlow(el, "warnGlow")
     end
     el:Show()
 end

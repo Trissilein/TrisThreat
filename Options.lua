@@ -270,6 +270,7 @@ local function buildMock(parent, y)
 
     mock = { panel = panel, uf = uf, bar = bar, element = ns.CreateElement() }
     mock.parts = { uf = uf, bar = bar, level = level, mock = true }
+    mock.element.parts = mock.parts -- the aggro glow of the mock element wraps the mock plate
 
     -- Drag the element anywhere in the preview. While the mouse is down, every snap spot is outlined; dropping on
     -- one picks that mode and side, dropping anywhere else places the element freely (what you see is what you get).
@@ -402,21 +403,16 @@ function ns.FlashGlow(kind)
     flashToken = flashToken + 1
     local token = flashToken
     if kind == "safe" then
-        mock.safe = mock.safe or ns.CreateSafeGlow()
-        ns.PlaceSafeGlow(mock.safe, mock.parts)
-        mock.safe:Show()
-        if not mock.safe.pulse:IsPlaying() then mock.safe.pulse:Play() end
+        ns.ShowBroadGlow(mock, "safeGlow", ns.GLOW_GREEN, mock.parts)
         if ns.TestSafeGlow then ns.TestSafeGlow() end
     else
-        local el = mock.element
-        el.glow:Show()
-        if not el.pulse:IsPlaying() then el.pulse:Play() end
+        ns.ShowBroadGlow(mock.element, "warnGlow", ns.GLOW_RED, mock.parts)
         if ns.TestWarn then ns.TestWarn() end
     end
     C_Timer.After(1.6, function()
         if token ~= flashToken then return end
-        if mock.safe then mock.safe.pulse:Stop(); mock.safe:Hide() end
-        ns.RefreshMock()
+        ns.HideBroadGlow(mock, "safeGlow")
+        ns.RefreshMock() -- hides the aggro glow again unless the preview slider really warns
     end)
 end
 

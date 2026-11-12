@@ -106,6 +106,7 @@ local function release(unit)
     local el = active[unit]
     if not el then return end
     active[unit] = nil
+    ns.HideBroadGlow(el, "warnGlow")
     ns.ReleaseForeign(el)
     if el.parts then
         clearTint(unit, el.parts)
@@ -338,8 +339,8 @@ local function setSafe(unit, plate, on)
         end
         return
     end
-    if not g then g = table.remove(safePool) or ns.CreateSafeGlow(); safeGlows[unit] = g end
-    ns.PlaceSafeGlow(g, getParts(plate))
+    if not g then g = table.remove(safePool) or ns.CreateBroadGlow(ns.GLOW_GREEN); safeGlows[unit] = g end
+    ns.PlaceBroadGlow(g, getParts(plate))
     g:Show()
     if not g.pulse:IsPlaying() then g.pulse:Play() end
 end
@@ -432,7 +433,7 @@ local previewParts, previewUnit
 
 local function clearPreview()
     if previewParts then
-        if preview then ns.ReleaseForeign(preview) end
+        if preview then ns.ReleaseForeign(preview); ns.HideBroadGlow(preview, "warnGlow") end
         if previewUnit and not active[previewUnit] then
             clearTint(previewUnit, previewParts)
             if previewParts.blizzard then ns.SyncRoom(previewParts.uf, nil) end
@@ -454,6 +455,7 @@ function ns.ShowPreview()
     if previewParts and previewParts.uf ~= parts.uf then clearPreview() end
     preview = preview or ns.CreateElement()
     previewParts, previewUnit = parts, unit
+    preview.parts = parts
     ns.Arrange(preview, parts)
     local color = ns.ColorForPercent(ns.previewPercent, ns.GetRole(), ns.previewOffTank)
     ns.PaintElement(preview, color, ns.previewPercent .. "%", ns.previewPercent, true, 0, 100, ns.PreviewWarn())
@@ -468,7 +470,7 @@ end
 
 function ns.HidePreview()
     clearPreview()
-    if preview then preview:Hide() end
+    if preview then preview:Hide(); ns.HideBroadGlow(preview, "warnGlow") end
 end
 
 ----------------------------------------------------------------------------------------------------
