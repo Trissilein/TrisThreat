@@ -9,12 +9,12 @@ check("empty db gets defaults", db.enabled and db.role == "auto" and db.offsetX 
     and db.scale == 1 and db.minimap.hide == false and db.colorBar == false)
 local bad = ns.NormalizeDB({ role = "x", offsetX = 500, offsetY = -500, scale = 9, hideTrivial = false,
     minimap = { hide = true } })
-check("bad values are repaired", bad.role == "auto" and bad.offsetX == 100
-    and bad.offsetY == -100 and bad.scale == 2)
+check("bad values are repaired", bad.role == "auto" and bad.offsetX == 400
+    and bad.offsetY == -400 and bad.scale == 2)
 check("explicit false and minimap hide survive", bad.hideTrivial == false and bad.minimap.hide == true)
 local twice = ns.NormalizeDB(ns.NormalizeDB({ offsetX = 12.4 }))
 check("idempotent and rounded offsets", twice.offsetX == 12)
-check("offset limit is 100 in every direction", ns.ClampOffset(101) == 100 and ns.ClampOffset(-101) == -100
+check("offset limit is 400 in every direction", ns.ClampOffset(401) == 400 and ns.ClampOffset(-401) == -400
     and ns.ClampOffset("abc") == 0 and ns.ClampOffset(nil) == 0)
 
 -- Role resolution
@@ -96,6 +96,30 @@ check("strip bottom lifts the health bar", ns.Layout("strip", "bottom", m, db2).
     and ns.Layout("strip", "bottom", m, db2).room.barY == 14)
 local fl = ns.Layout("floating", "right", m, ns.NormalizeDB({ offsetX = 20, offsetY = -10, scale = 2 }))
 check("floating uses offsets and scale", fl.scale == 2 and fl.points[1][4] == 10 and fl.points[1][5] == -3.5)
+
+-- Settings preview: snap spots and free placement
+local zoneRects, inside = {}, true
+for i, z in ipairs(ns.MOCK_ZONES) do
+    local l, b, r, t = ns.MockZoneRect(z.mode, z.side)
+    zoneRects[i] = { l, b, r, t }
+    inside = inside and l >= 0 and b >= 0 and r <= ns.MOCK_W and t <= ns.MOCK_H and r > l and t > b
+end
+check("every snap spot lies inside the preview", inside and #zoneRects == 8)
+local function spot(mode, side) for i, z in ipairs(ns.MOCK_ZONES) do if z.mode == mode and z.side == side then return i end end end
+local function centerOf(i) local r = zoneRects[i]; return (r[1] + r[3]) / 2, (r[2] + r[4]) / 2 end
+local ok = true
+for i = 1, #zoneRects do
+    local x, y = centerOf(i)
+    ok = ok and ns.PickMockZone(x, y, zoneRects) == i
+end
+check("the center of each snap spot picks that spot", ok)
+check("far from every spot picks none", ns.PickMockZone(600, 130, zoneRects) == nil)
+local ox, oy = ns.MockFreeOffsets(500, 60, 1)
+check("free offsets put the element center under the cursor", ox == 272 and math.abs(oy + 32.5) <= 1)
+local cx0, cy0 = ns.MockFreeOffsets(-50, 500, 1)
+check("free placement stays inside the preview", cx0 < 0 and cx0 > -210 and cy0 > 0 and cy0 < 80)
+local fx = ns.MockFreeOffsets(1000, 60, 2)
+check("free placement on the far right is reachable", fx > 250 and fx <= ns.OFFSET_LIMIT)
 
 -- Tank lead: 100 % red, 150 % yellow, 200 % and more green
 check("lead 100 is red", near(ns.LeadColor(100)[1], 0.90) and near(ns.LeadColor(100)[2], 0.15))

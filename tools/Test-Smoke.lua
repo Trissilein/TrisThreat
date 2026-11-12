@@ -26,6 +26,7 @@ local returns = {
     CreateAnimationGroup = function() return Stub() end,
     CreateAnimation = function() return Stub() end,
     IsPlaying = function() return false end,
+    GetEffectiveScale = function() return 1 end,
 }
 -- Unknown keys return a callable stub: works both as a method (obj:Foo()) and as a child region (obj.Low:SetText()).
 function Stub(name)
@@ -114,6 +115,26 @@ for _, mode in ipairs({ "badge", "segment", "strip", "floating" }) do
 end
 check("every mode and side updates a nameplate and the mock", true)
 check("make room moved Blizzard elements", (calls.AdjustPointsOffset or 0) > AdjustBefore)
+
+-- dragging the preview element: snap spots pick mode and side, anywhere else is free placement
+local mock = ns.mock
+local function dragTo(x, y)
+    _G.GetCursorPosition = function() return x, y end
+    mock.element.__script_OnDragStart()
+    mock.dragger.__script_OnUpdate()
+    mock.element.__script_OnDragStop()
+end
+local l, b, r, t = ns.MockZoneRect("strip", "bottom")
+dragTo((l + r) / 2, (b + t) / 2)
+check("dropping on a strip spot snaps to strip below", TrisThreatDB.mode == "strip" and TrisThreatDB.side == "bottom")
+l, b, r, t = ns.MockZoneRect("badge", "left")
+dragTo((l + r) / 2, (b + t) / 2)
+check("dropping on the badge-left spot snaps there", TrisThreatDB.mode == "badge" and TrisThreatDB.side == "left")
+dragTo(600, 130)
+check("dropping elsewhere places freely, far to the right", TrisThreatDB.mode == "floating" and TrisThreatDB.offsetX > 150)
+TrisThreatDB.mode, TrisThreatDB.side, TrisThreatDB.offsetX, TrisThreatDB.offsetY = "badge", "right", 0, 0
+ns.FlashGlow()
+check("flashing the glow runs and restores the preview", true)
 
 -- room bookkeeping: switching back to floating leaves nothing applied
 TrisThreatDB.mode = "badge"; TrisThreatDB.side = "left"

@@ -5,7 +5,7 @@ local issecretvalue = issecretvalue or function() return false end
 
 -- Everything that is pure logic (defaults, role, colors, filters) lives here so the Fengari harness can test it.
 
-ns.OFFSET_LIMIT = 100
+ns.OFFSET_LIMIT = 400 -- the settings preview is ~630 wide: the element can be dragged across all of it
 
 ns.defaults = {
     enabled = true,
@@ -14,7 +14,7 @@ ns.defaults = {
     offsetY = 0,
     scale = 1,
     mode = "badge",      -- floating | badge | segment | strip
-    side = "right",      -- left | right | top | bottom (segment: left/right, strip: top/bottom)
+    side = "right",      -- left | right | top | bottom (segment: left/right, strip: top/bottom); set by dropping in the preview
     makeRoom = true,     -- move Blizzard elements aside for the integrated modes
     colorText = true,    -- threat color on the number
     colorBackground = false, -- threat color on the badge/segment background (the strip fill is always colored)
@@ -382,4 +382,77 @@ function ns.Layout(mode, side, m, db)
         room.nameY = spec.h + 5
     end
     return spec
+end
+
+----------------------------------------------------------------------------------------------------
+-- Settings preview: snap spots and free placement. Coordinates are panel-local (origin bottom-left),
+-- computed from the mock's fixed geometry (Options.lua layoutMock), so they never move while dragging.
+----------------------------------------------------------------------------------------------------
+
+ns.MOCK_W, ns.MOCK_H = 628, 150
+ns.MOCK_ZONES = {
+    { mode = "badge", side = "right", text = "Badge right" }, { mode = "badge", side = "left", text = "Badge left" },
+    { mode = "badge", side = "top", text = "Badge above" }, { mode = "badge", side = "bottom", text = "Badge below" },
+    { mode = "segment", side = "left", text = "Segment left" }, { mode = "segment", side = "right", text = "Segment right" },
+    { mode = "strip", side = "top", text = "Strip above" }, { mode = "strip", side = "bottom", text = "Strip below" },
+}
+local MOCK_MEASURE = { barW = 190, barH = 20, levelShown = true, levelRight = true, levelW = 28, levelH = 25 }
+
+local function mockRects()
+    local barL = ns.MOCK_W / 2 - 16 - 95
+    local barB = ns.MOCK_H / 2 - 8 - 10
+    local bar = { l = barL, b = barB, r = barL + 190, t = barB + 20 }
+    local level = { l = bar.r + 5, b = bar.b - 2, r = bar.r + 5 + 28, t = bar.t + 3 }
+    return bar, level
+end
+
+local function rectPoint(r, point)
+    local x = point:find("LEFT") and r.l or point:find("RIGHT") and r.r or (r.l + r.r) / 2
+    local y = point:find("BOTTOM") and r.b or point:find("TOP") and r.t or (r.b + r.t) / 2
+    return x, y
+end
+
+-- left, bottom, right, top of the spot where ns.Layout would put the element.
+function ns.MockZoneRect(mode, side)
+    local bar, level = mockRects()
+    local rects = { bar = bar, level = level }
+    local spec = ns.Layout(mode, side, MOCK_MEASURE, nil)
+    local p = spec.points[1]
+    local ax, ay = rectPoint(rects[p[2]], p[3])
+    ax, ay = ax + p[4], ay + p[5]
+    local w = spec.w
+    if spec.points[2] then
+        local q = spec.points[2]
+        local bx = rectPoint(rects[q[2]], q[3])
+        w = bx + q[4] - ax
+    end
+    local l = p[1]:find("LEFT") and ax or p[1]:find("RIGHT") and ax - w or ax - w / 2
+    local b = p[1]:find("BOTTOM") and ay or p[1]:find("TOP") and ay - spec.h or ay - spec.h / 2
+    return l, b, l + w, b + spec.h
+end
+
+-- Index of the snap spot under (x, y): the closest within a few pixels, the smaller one when spots overlap.
+function ns.PickMockZone(x, y, rects)
+    local best, bestDist, bestArea
+    for i, r in ipairs(rects) do
+        local dx = math.max(r[1] - x, 0, x - r[3])
+        local dy = math.max(r[2] - y, 0, y - r[4])
+        local dist = math.sqrt(dx * dx + dy * dy)
+        local area = (r[3] - r[1]) * (r[4] - r[2])
+        if dist <= 4 and (not best or dist < bestDist or (dist == bestDist and area < bestArea)) then
+            best, bestDist, bestArea = i, dist, area
+        end
+    end
+    return best
+end
+
+-- Free placement: offsets that put the element's center under (x, y), kept inside the preview.
+function ns.MockFreeOffsets(x, y, scale)
+    local bar = mockRects()
+    scale = scale or 1
+    local spec = ns.Layout("floating", "right", MOCK_MEASURE, { offsetX = 0, offsetY = 0, scale = scale })
+    local w, h = spec.w * scale, spec.h * scale
+    x = math.max(w / 2, math.min(ns.MOCK_W - w / 2, x))
+    y = math.max(h / 2, math.min(ns.MOCK_H - h / 2, y))
+    return ns.ClampOffset(x - w / 2 - bar.l), ns.ClampOffset(y - h / 2 - bar.t - 3)
 end

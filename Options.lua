@@ -49,8 +49,7 @@ end
 
 -- Hover help for every control, keyed by the control's label.
 local TIPS = {
-    ["Mode"] = "How the threat value appears on the nameplate: as a second level badge, as a segment inside the health bar, as a thin threat bar above or below it, or as a freely placed element.",
-    ["Side"] = "Where the element sits. Badge: left, right, top or bottom of the health bar. Segment: left or right end of the bar. Strip: above or below the bar. Ignored by free placement.",
+    ["Mode"] = "How the threat value appears on the nameplate: as a second level badge, as a segment inside the health bar, as a thin threat bar above or below it, or as a freely placed element. You can also just drag the element in the preview.",
     ["Make room (move nameplate elements aside)"] = "Moves the nameplate's name, raid icon, elite dragon, crowd-control icons or health text aside so nothing overlaps the element. Blizzard nameplates only.",
     ["Color the number"] = "The threat number takes the threat color (green at 0 %, red at 100 %).",
     ["Color the background"] = "The badge or segment background takes the threat color. With a colored number as well, the background uses a darker shade so the number stays readable.",
@@ -59,7 +58,7 @@ local TIPS = {
     ["Role"] = "Decides the color direction. Automatic detects tanks by stance, form or aura, then by group role or specialization. As a tank, holding the enemy is green; otherwise it is red.",
     ["Size"] = "Free placement only: scales it from half to double size.",
     ["Reset position"] = "Free placement only: back to the bar's top-left corner at normal size.",
-    ["Enabled"] = "Turns TrisThreat on or off.",
+    ["Enable TrisThreat"] = "Turns TrisThreat on or off.",
     ["Only in instances"] = "Show the element only in dungeons, raids and other instances.",
     ["Hide on trivial mobs"] = "No element on trivial or minor enemies.",
     ["Show minimap icon"] = "Shows the TrisThreat button on the minimap. Right-click the button to hide it.",
@@ -85,7 +84,7 @@ local function onLayoutChanged()
     if ns.RefreshOptions then ns.RefreshOptions() end
 end
 
-local function checkbox(parent, text, x, y, key)
+local function checkbox(parent, text, x, y, key, after)
     local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     check:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 2, y)
     check:SetSize(24, 24)
@@ -96,6 +95,7 @@ local function checkbox(parent, text, x, y, key)
     check:SetScript("OnClick", function(self)
         TrisThreatDB[key] = self:GetChecked() and true or false
         onLayoutChanged()
+        if after then after() end
     end)
     controls[#controls + 1] = function() check:SetChecked(TrisThreatDB[key] == true) end
     return check
@@ -271,27 +271,96 @@ local function buildMock(parent, y)
     mock = { panel = panel, uf = uf, bar = bar, element = ns.CreateElement() }
     mock.parts = { uf = uf, bar = bar, level = level, mock = true }
 
-    -- Free placement: drag the element in the preview; the offsets follow the cursor (what you see is what you get).
+    -- Drag the element anywhere in the preview. While the mouse is down, every snap spot is outlined; dropping on
+    -- one picks that mode and side, dropping anywhere else places the element freely (what you see is what you get).
     local dragger = CreateFrame("Frame")
     local el = mock.element
+    el:EnableMouse(true)
     el:RegisterForDrag("LeftButton")
+    mock.caption = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    mock.caption:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -6)
+    mock.caption:Hide()
+    mock.zones = {}
+    for i, z in ipairs(ns.MOCK_ZONES) do
+        local f = CreateFrame("Frame", nil, panel)
+        f:SetFrameLevel(panel:GetFrameLevel() + 20)
+        f.tex = f:CreateTexture(nil, "OVERLAY")
+        f.tex:SetAllPoints()
+        f.zone = z
+        f:Hide()
+        mock.zones[i] = f
+    end
+
+    local function paintZones(active)
+        for _, f in ipairs(mock.zones) do
+            if f == active then f.tex:SetColorTexture(1, 0.82, 0.2, 0.6) else f.tex:SetColorTexture(0.35, 0.8, 0.45, 0.3) end
+        end
+    end
+    local function showZones()
+        for _, f in ipairs(mock.zones) do
+            local l, b, r, t = ns.MockZoneRect(f.zone.mode, f.zone.side)
+            f.rect = { l, b, r, t }
+            f:ClearAllPoints()
+            f:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", l, b)
+            f:SetSize(r - l, t - b)
+            f:Show()
+        end
+        paintZones(nil)
+    end
+    local function hideZones()
+        for _, f in ipairs(mock.zones) do f:Hide() end
+        mock.caption:Hide()
+    end
+    el:SetScript("OnMouseDown", showZones)
+    el:SetScript("OnMouseUp", hideZones)
+
     el:SetScript("OnDragStart", function()
         local db = TrisThreatDB
-        local sx, sy = GetCursorPosition()
-        local x0, y0 = db.offsetX or 0, db.offsetY or 0
+        showZones()
         dragger:SetScript("OnUpdate", function()
             local cx, cy = GetCursorPosition()
-            local es = uf:GetEffectiveScale()
-            local nx = ns.ClampOffset(x0 + (cx - sx) / es)
-            local ny = ns.ClampOffset(y0 + (cy - sy) / es)
-            if nx ~= db.offsetX or ny ~= db.offsetY then
-                db.offsetX, db.offsetY = nx, ny
+            local es = panel:GetEffectiveScale()
+            local px, py = cx / es - (panel:GetLeft() or 0), cy / es - (panel:GetBottom() or 0)
+            local rects = {}
+            for i, f in ipairs(mock.zones) do rects[i] = f.rect end
+            local index = ns.PickMockZone(px, py, rects)
+            local active = index and mock.zones[index]
+            paintZones(active)
+            local mode, side, nx, ny = "floating", db.side, db.offsetX, db.offsetY
+            if active then
+                mode, side = active.zone.mode, active.zone.side
+                mock.caption:SetText(L[active.zone.text] or active.zone.text)
+            else
+                nx, ny = ns.MockFreeOffsets(px, py, db.scale)
+                mock.caption:SetText(L["Free placement"])
+            end
+            mock.caption:Show()
+            if mode ~= db.mode or side ~= db.side or nx ~= db.offsetX or ny ~= db.offsetY then
+                db.mode, db.side, db.offsetX, db.offsetY = mode, side, nx, ny
                 ns.ApplyLayout()
                 ns.RefreshMock()
             end
         end)
     end)
-    el:SetScript("OnDragStop", function() dragger:SetScript("OnUpdate", nil) end)
+    el:SetScript("OnDragStop", function()
+        dragger:SetScript("OnUpdate", nil)
+        hideZones()
+        if ns.RefreshOptions then ns.RefreshOptions() end -- the Mode dropdown follows the drop
+    end)
+    mock.dragger = dragger -- the smoke test drives the drag through these
+    ns.mock = mock
+end
+
+-- Plays the aggro glow once in the preview (when the glow checkbox is toggled), then restores the real state.
+local flashToken = 0
+function ns.FlashGlow()
+    if not mock then return end
+    local el = mock.element
+    el.glow:Show()
+    if not el.pulse:IsPlaying() then el.pulse:Play() end
+    flashToken = flashToken + 1
+    local token = flashToken
+    C_Timer.After(1.6, function() if token == flashToken then ns.RefreshMock() end end)
 end
 
 function ns.RefreshMock()
@@ -302,7 +371,6 @@ function ns.RefreshMock()
     local barColor = db.colorBar and color or { 0.78, 0.12, 0.12 }
     mock.bar:SetStatusBarColor(barColor[1], barColor[2], barColor[3])
     ns.Arrange(mock.element, mock.parts)
-    mock.element:EnableMouse(db.mode == "floating")
     ns.PaintElement(mock.element, color, ns.previewPercent .. "%", ns.previewPercent, true, 0, 100, ns.PreviewWarn())
     if mock.percentText then mock.percentText:SetText(ns.previewPercent .. "%") end
 end
@@ -389,10 +457,10 @@ local function build()
         { value = "strip", text = "Strip above or below the bar" },
         { value = "floating", text = "Free placement" },
     }); yl = yl - 34
-    dropdown(frame, "Side", COL1, yl, "side", {
-        { value = "right", text = "Right" }, { value = "left", text = "Left" },
-        { value = "top", text = "Top" }, { value = "bottom", text = "Bottom" },
-    }); yl = yl - 34
+    local drag = label(frame, "Drag the element in the preview: drop it on an outlined spot to snap it there, anywhere else to place it freely.", "GameFontNormalSmall")
+    drag:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 2, yl + 4)
+    drag:SetWidth(COLW)
+    drag:SetJustifyH("LEFT"); yl = yl - 40
     checkbox(frame, "Make room (move nameplate elements aside)", COL1, yl, "makeRoom"); yl = yl - 34
 
     heading(frame, "Colors", COL1, yl); yl = yl - 24
@@ -400,7 +468,8 @@ local function build()
     for _, c in ipairs({ { "Color the number", "colorText" }, { "Color the background", "colorBackground" },
         { "Color the nameplate bar", "colorBar" }, { "Number on the strip", "stripText" },
         { "Aggro warning glow", "glow" } }) do
-        checkbox(frame, c[1], COL1, yl, c[2]); yl = yl - 24
+        -- The glow only shows in a warning state: play it once when toggled so the setting can be seen.
+        checkbox(frame, c[1], COL1, yl, c[2], c[2] == "glow" and ns.FlashGlow or nil); yl = yl - 24
     end
     yl = yl - 6
     local legend = label(frame, "Green at 0 % threat, red at 100 %. As a tank holding the enemy, it follows your lead: full and green with a big lead, shrinking and turning red as the next player closes in.", "GameFontNormalSmall")
@@ -423,11 +492,6 @@ local function build()
     yr = yr - 22
 
     heading(frame, "Free placement", COL2, yr); yr = yr - 26
-    local drag = label(frame, "Drag the element in the preview above to place it.", "GameFontNormalSmall")
-    drag:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2 + 2, yr)
-    drag:SetWidth(COLW)
-    drag:SetJustifyH("LEFT")
-    floatingOnly[#floatingOnly + 1] = drag; yr = yr - 28
     floatingOnly[#floatingOnly + 1] = slider(frame, "Size", COL2, yr, "scale", 0.5, 2, 0.1); yr = yr - 44
     local reset = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     reset:SetSize(140, 22)
@@ -441,13 +505,13 @@ local function build()
     floatingOnly[#floatingOnly + 1] = reset
     yr = yr - 34
 
-    heading(frame, "Filters", COL2, yr); yr = yr - 24
-    checkbox(frame, "Enabled", COL2, yr, "enabled")
-    checkbox(frame, "Only in instances", COL2 + 150, yr, "onlyInstances"); yr = yr - 26
-    checkbox(frame, "Hide on trivial mobs", COL2, yr, "hideTrivial")
+    heading(frame, "General", COL2, yr); yr = yr - 24
+    checkbox(frame, "Enable TrisThreat", COL2, yr, "enabled"); yr = yr - 26
+    checkbox(frame, "Only in instances", COL2, yr, "onlyInstances")
+    checkbox(frame, "Hide on trivial mobs", COL2 + 150, yr, "hideTrivial"); yr = yr - 26
     -- The minimap flag lives in a sub-table and is stored inverted (hide), so this box is built by hand.
     local mini = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-    mini:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2 + 148, yr)
+    mini:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2 - 2, yr)
     mini:SetSize(24, 24)
     label(frame, "Show minimap icon"):SetPoint("LEFT", mini, "RIGHT", 2, 0)
     addTooltip(mini, "Show minimap icon")
