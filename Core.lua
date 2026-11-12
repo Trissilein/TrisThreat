@@ -21,6 +21,7 @@ ns.defaults = {
     stripText = true,    -- strip mode shows the number at its right end
     glow = true,         -- pulsing red halo: tank lost aggro, or anybody else pulled it
     colorBar = false,    -- also tint the nameplate health bar
+    safeGlow = true,     -- green halo on the enemy a tank holds and you are not on (non-tanks only)
     onlyInstances = false,
     hideTrivial = true,
     minimap = { hide = false },
@@ -51,7 +52,7 @@ function ns.NormalizeDB(db)
     db.scale = clamp(db.scale, 0.5, 2, 1)
     db.mode = DISPLAY_MODES[db.mode] and db.mode or d.mode
     db.side = SIDES[db.side] and db.side or d.side
-    for _, key in ipairs({ "makeRoom", "colorText", "colorBackground", "stripText", "glow", "colorBar", "hideTrivial" }) do
+    for _, key in ipairs({ "makeRoom", "colorText", "colorBackground", "stripText", "glow", "safeGlow", "colorBar", "hideTrivial" }) do
         if db[key] == nil then db[key] = d[key] end
         db[key] = db[key] == true
     end
@@ -281,6 +282,24 @@ function ns.StatusColorKey(status, role, offTank)
     if status >= 2 then return "bad" end
     if status == 1 then return "warn" end
     return "good"
+end
+
+-- Safe target: a tank or pet holds the enemy and you are not on its threat list (nil) or far below the holder (0).
+-- A secret status (false) is never safe. Threat numbers are secret, so this is a yes/no, not a ranking.
+function ns.IsSafeStatus(status)
+    return status == nil or status == 0
+end
+
+-- candidates = { unit = targetedByHolder }. If a holder targets some of them, only those; else all.
+function ns.PickSafe(candidates)
+    local anyTargeted, picks = false, {}
+    for _, targeted in pairs(candidates) do
+        if targeted then anyTargeted = true end
+    end
+    for unit, targeted in pairs(candidates) do
+        if targeted or not anyTargeted then picks[unit] = true end
+    end
+    return picks
 end
 
 ----------------------------------------------------------------------------------------------------

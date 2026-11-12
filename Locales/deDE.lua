@@ -76,6 +76,8 @@ L["Try a threat value: the preview above and your current target show it, no com
 L["Preview the off-tank color (blue, tanks only)."] = "Off-Tank-Farbe in der Vorschau (blau, nur Tanks)."
 L["Aggro warning glow"] = "Aggro-Warnleuchten"
 L["A pulsing red glow around the element when it matters: as a tank when you lose the enemy (and no other tank has it), otherwise when you pull it."] = "Ein pulsierendes rotes Leuchten um das Element, wenn es zählt: als Tank, wenn du den Gegner verlierst (und kein anderer Tank ihn hat), sonst, wenn du ihn ziehst."
+L["Safe target glow"] = "Leuchten für sicheres Ziel"
+L["A green glow on the enemy that is safest to attack: a group tank or your pet holds it and you are not on its threat list. If the tank is targeting one of them, only that one glows. Not for tanks."] = "Ein grünes Leuchten auf dem Gegner, den du am sichersten angreifen kannst: Ein Gruppen-Tank oder dein Begleiter hält ihn, und du stehst nicht auf seiner Threat-Liste. Visiert der Tank einen davon an, leuchtet nur dieser. Nicht für Tanks."
 L["Tank mode"] = "Tank-Modus"
 L["DPS mode"] = "DPS-Modus"
 L["Healer mode"] = "Heiler-Modus"

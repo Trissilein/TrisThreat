@@ -5,7 +5,7 @@ local frame
 local controls = {}       -- refresh functions
 local floatingOnly = {}   -- controls enabled only in floating mode
 
-local WIDTH, HEIGHT = 660, 566
+local WIDTH, HEIGHT = 660, 590
 local COL1, COL2, COLW = 16, 342, 302
 
 -- Same look as the WoWraVox window: dark marble panel, gold corners, thin brown rules.
@@ -64,6 +64,7 @@ local TIPS = {
     ["Preview threat"] = "Try a threat value: the preview above and your current target show it, no combat needed.",
     ["Off-tank"] = "Preview the off-tank color (blue, tanks only).",
     ["Aggro warning glow"] = "A pulsing red glow around the element when it matters: as a tank when you lose the enemy (and no other tank has it), otherwise when you pull it.",
+    ["Safe target glow"] = "A green glow on the enemy that is safest to attack: a group tank or your pet holds it and you are not on its threat list. If the tank is targeting one of them, only that one glows. Not for tanks.",
 }
 
 local function addTooltip(widget, text)
@@ -502,7 +503,7 @@ local function build()
     -- One checkbox per row: two columns clipped the longer labels under their neighbour.
     for _, c in ipairs({ { "Color the number", "colorText" }, { "Color the background", "colorBackground" },
         { "Color the nameplate bar", "colorBar" }, { "Number on the strip", "stripText" },
-        { "Aggro warning glow", "glow" } }) do
+        { "Aggro warning glow", "glow" }, { "Safe target glow", "safeGlow" } }) do
         -- The glow only shows in a warning state: play it once when toggled so the setting can be seen.
         checkbox(frame, c[1], COL1, yl, c[2], c[2] == "glow" and ns.FlashGlow or nil); yl = yl - 24
     end
@@ -676,6 +677,19 @@ SlashCmdList["TRISTHREAT"] = function(message)
             local okLead = ns.ProbeCurve(lead)
             print("|cffe0ad3dTrisThreat|r probe: lead " .. (lead == nil and "none" or (issecretvalue and issecretvalue(lead)) and "secret" or tostring(lead))
                 .. ", curve " .. (okLead and "OK" or "FAILED"))
+        end
+        if UnitExists("target") then
+            -- Safe-target glow needs these: can we read who a tank or pet is targeting, and who holds the target?
+            local seen = {}
+            for _, token in ipairs({ "pet", "party1", "party2", "party3", "party4" }) do
+                if UnitExists(token) then
+                    local same = UnitIsUnit(token .. "target", "target")
+                    local status = UnitThreatSituation(token, "target")
+                    seen[#seen + 1] = token .. " targets: " .. (same == nil and "nil" or (issecretvalue and issecretvalue(same)) and "secret" or tostring(same))
+                        .. ", threat status: " .. (status == nil and "none" or (issecretvalue and issecretvalue(status)) and "secret" or tostring(status))
+                end
+            end
+            print("|cffe0ad3dTrisThreat|r probe: safe target - " .. (#seen > 0 and table.concat(seen, "; ") or "no group member or pet"))
         end
         if not UnitExists("target") then
             print("|cffe0ad3dTrisThreat|r probe: no target - target an enemy in combat and run /tt probe again")

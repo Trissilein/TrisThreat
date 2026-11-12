@@ -74,6 +74,34 @@ function ns.CreateElement()
     return el
 end
 
+-- Safe-target halo: a green pulsing glow around a plate's health bar (separate from the element, which is
+-- hidden on enemies you are not on the threat list of).
+function ns.CreateSafeGlow()
+    local g = CreateFrame("Frame", nil, UIParent)
+    g.tex = g:CreateTexture(nil, "BACKGROUND", nil, -8)
+    g.tex:SetTexture("Interface\\GLUES\\Models\\UI_Draenei\\GenericGlow64")
+    g.tex:SetBlendMode("ADD")
+    g.tex:SetVertexColor(0.18, 0.85, 0.30, 1)
+    g.tex:SetAllPoints()
+    g.pulse = g.tex:CreateAnimationGroup()
+    g.pulse:SetLooping("BOUNCE")
+    local fade = g.pulse:CreateAnimation("Alpha")
+    fade:SetFromAlpha(0.35)
+    fade:SetToAlpha(0.95)
+    fade:SetDuration(0.8)
+    return g
+end
+
+function ns.PlaceSafeGlow(g, parts)
+    local parent = parts.uf
+    g:SetParent(parent)
+    g:SetFrameStrata(parent:GetFrameStrata())
+    g:SetFrameLevel(parent:GetFrameLevel() + 55)
+    g:ClearAllPoints()
+    g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -16, 12)
+    g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", 16, -12)
+end
+
 -- Switches the regions to one look. Only runs when the look or side changes.
 local function configure(el, look, side)
     if el.look == look and el.side == side then return end

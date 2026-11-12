@@ -17,6 +17,18 @@ check("idempotent and rounded offsets", twice.offsetX == 12)
 check("offset limit is 400 in every direction", ns.ClampOffset(401) == 400 and ns.ClampOffset(-401) == -400
     and ns.ClampOffset("abc") == 0 and ns.ClampOffset(nil) == 0)
 
+-- Safe target: status nil/0 only; a holder's target wins when readable
+check("safe status: not on the list or 0", ns.IsSafeStatus(nil) and ns.IsSafeStatus(0))
+check("unsafe status: 1..3 and unreadable", not ns.IsSafeStatus(1) and not ns.IsSafeStatus(2)
+    and not ns.IsSafeStatus(3) and not ns.IsSafeStatus(false))
+local picks = ns.PickSafe({ a = false, b = false })
+check("no holder target known: all candidates", picks.a and picks.b)
+picks = ns.PickSafe({ a = false, b = true, c = false })
+check("holder targets one: only that one", picks.b and not picks.a and not picks.c)
+check("no candidates: nothing", next(ns.PickSafe({})) == nil)
+check("safeGlow defaults on and normalizes", ns.NormalizeDB({}).safeGlow == true
+    and ns.NormalizeDB({ safeGlow = false }).safeGlow == false)
+
 -- Role resolution
 local function api(tank, group, spec)
     return { tankAura = function() return tank end, groupRole = function() return group end, specRole = function() return spec end }

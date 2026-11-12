@@ -168,6 +168,36 @@ ns.UpdateUnit("nameplate1")
 check("tank strip updates with the lead", true)
 TrisThreatDB.role = "auto"
 
+-- Safe target: a TANK party member holds the mob, the player is not on its list -> green halo; off when it is.
+do
+    local real = { IsInGroup = _G.IsInGroup, GetNum = _G.GetNumSubgroupMembers, Roles = _G.UnitGroupRolesAssigned,
+        IsUnit = _G.UnitIsUnit, Exists = _G.UnitExists, Threat = _G.UnitThreatSituation }
+    _G.IsInGroup = function() return true end
+    _G.GetNumSubgroupMembers = function() return 1 end
+    _G.UnitGroupRolesAssigned = function() return "TANK" end
+    _G.UnitExists = function() return true end
+    _G.UnitIsUnit = function(a, b) return a == b end
+    local playerStatus = 0
+    _G.UnitThreatSituation = function(unit) if unit == "player" then return playerStatus end return 3 end
+    TrisThreatDB.role, TrisThreatDB.safeGlow, TrisThreatDB.enabled = "damage", true, true
+    ns.RefreshSafe()
+    check("tank holds it, you are not on it: safe glow on", ns.safeGlows.nameplate1 ~= nil)
+    playerStatus = 2
+    ns.RefreshSafe()
+    check("you pulled it: safe glow off", ns.safeGlows.nameplate1 == nil)
+    playerStatus = 0
+    TrisThreatDB.role = "tank"
+    ns.RefreshSafe()
+    check("tanks get no safe glow", ns.safeGlows.nameplate1 == nil)
+    TrisThreatDB.role, TrisThreatDB.safeGlow = "damage", false
+    ns.RefreshSafe()
+    check("option off: no safe glow", ns.safeGlows.nameplate1 == nil)
+    TrisThreatDB.safeGlow = true
+    _G.IsInGroup, _G.GetNumSubgroupMembers, _G.UnitGroupRolesAssigned = real.IsInGroup, real.GetNum, real.Roles
+    _G.UnitIsUnit, _G.UnitExists, _G.UnitThreatSituation = real.IsUnit, real.Exists, real.Threat
+    TrisThreatDB.role = "auto"
+end
+
 -- Foreign icon (Questie style): pushed out of a left badge and kept there when its addon re-anchors it.
 do
     local realHook = _G.hooksecurefunc

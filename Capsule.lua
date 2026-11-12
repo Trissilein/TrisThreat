@@ -214,23 +214,25 @@ function ns.OthersOnThreatList(unit)
     return false
 end
 
--- Another tank (assigned role TANK) or your own pet holds the mob.
-local function otherHolds(unit)
-    if holds("pet", unit) then return true end
+-- Token of the other tank (assigned role TANK) or your own pet that holds the mob, else nil.
+local function holderOf(unit)
+    if holds("pet", unit) then return "pet" end
     local prefix, count
     if IsInRaid and IsInRaid() then prefix, count = "raid", GetNumGroupMembers()
     elseif IsInGroup and IsInGroup() then prefix, count = "party", GetNumSubgroupMembers()
-    else return false end
+    else return nil end
     for index = 1, count do
         local member = prefix .. index
         local same = UnitIsUnit(member, "player")
         if same ~= nil and not issecretvalue(same) and not same then
             local role = UnitGroupRolesAssigned(member)
-            if role == "TANK" and holds(member, unit) then return true end
+            if role == "TANK" and holds(member, unit) then return member end
         end
     end
-    return false
+    return nil
 end
+
+local function otherHolds(unit) return holderOf(unit) ~= nil end
 
 local function safeClassification(unit)
     local value = UnitClassification and UnitClassification(unit)
@@ -319,6 +321,65 @@ local function plateUnit(plate)
     return unit
 end
 
+----------------------------------------------------------------------------------------------------
+-- Safe target: green halo on the enemy a tank/pet holds while you are not on its threat list
+----------------------------------------------------------------------------------------------------
+
+local safeGlows, safePool = {}, {}   -- unit token -> halo frame
+ns.safeGlows = safeGlows
+
+local function setSafe(unit, plate, on)
+    local g = safeGlows[unit]
+    if not on then
+        if g then
+            safeGlows[unit] = nil
+            g.pulse:Stop(); g:Hide(); g:SetParent(UIParent); g:ClearAllPoints()
+            safePool[#safePool + 1] = g
+        end
+        return
+    end
+    if not g then g = table.remove(safePool) or ns.CreateSafeGlow(); safeGlows[unit] = g end
+    ns.PlaceSafeGlow(g, getParts(plate))
+    g:Show()
+    if not g.pulse:IsPlaying() then g.pulse:Play() end
+end
+
+-- Does the holder currently target this mob? (A secret answer counts as no.)
+local function targetedBy(holder, unit)
+    local same = UnitIsUnit(holder .. "target", unit)
+    return same ~= nil and not issecretvalue(same) and same == true
+end
+
+function ns.RefreshSafe()
+    local db = TrisThreatDB
+    local plates, candidates = {}, {}
+    if db and db.enabled and db.safeGlow and ns.GetRole() ~= "tank" then
+        for _, plate in ipairs(C_NamePlate.GetNamePlates() or {}) do
+            local unit = plateUnit(plate)
+            if unit then
+                plates[unit] = plate
+                local attackable = UnitCanAttack("player", unit)
+                if issecretvalue(attackable) then attackable = true end
+                local dead = UnitIsDead(unit)
+                if issecretvalue(dead) then dead = false end
+                if attackable and not dead
+                    and ns.ShouldShow(db, safeClassification(unit), IsInInstance and IsInInstance() or false) then
+                    local status = readStatus(unit)
+                    if status ~= false and ns.IsSafeStatus(status) then
+                        local holder = holderOf(unit)
+                        if holder then candidates[unit] = targetedBy(holder, unit) end
+                    end
+                end
+            end
+        end
+    end
+    local picks = ns.PickSafe(candidates)
+    for unit, plate in pairs(plates) do setSafe(unit, plate, picks[unit]) end
+    for unit in pairs(safeGlows) do
+        if not plates[unit] then setSafe(unit, nil, false) end
+    end
+end
+
 function ns.RefreshAll()
     local seen = {}
     for _, plate in ipairs(C_NamePlate.GetNamePlates() or {}) do
@@ -331,6 +392,7 @@ function ns.RefreshAll()
     for unit in pairs(active) do
         if not seen[unit] then release(unit) end
     end
+    ns.RefreshSafe()
     if preview and preview:IsShown() then ns.ShowPreview() end
     if ns.UpdateModeDisplay then ns.UpdateModeDisplay() end
 end
@@ -394,6 +456,7 @@ end
 ----------------------------------------------------------------------------------------------------
 
 local dirty, elapsed = false, 0
+local safeDirty, safeTick = false, 0
 local lastRole
 
 function ns.QueueRefresh() dirty = true end
@@ -413,20 +476,27 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         end
         self:RegisterUnitEvent("UNIT_AURA", "player")
         self:SetScript("OnUpdate", function(_, delta)
-            elapsed = elapsed + delta
+            elapsed, safeTick = elapsed + delta, safeTick + delta
             if dirty and elapsed >= 0.1 then
-                dirty, elapsed = false, 0
+                dirty, safeDirty, elapsed, safeTick = false, false, 0, 0
                 ns.RefreshAll()
+            elseif safeTick >= 0.5 or (safeDirty and safeTick >= 0.1) then
+                -- Who a tank targets changes without a threat event: re-check twice a second.
+                safeDirty, safeTick = false, 0
+                ns.RefreshSafe()
             end
         end)
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         ns.UpdateUnit(arg1)
+        safeDirty = true
     elseif event == "NAME_PLATE_UNIT_REMOVED" then
         release(arg1)
+        safeDirty = true
         if arg1 == previewUnit then clearPreview(); if preview then preview:Hide() end end
     elseif event == "UNIT_THREAT_LIST_UPDATE" or event == "UNIT_THREAT_SITUATION_UPDATE" then
         if type(arg1) == "string" and not issecretvalue(arg1) and arg1:find("^nameplate") then
             ns.UpdateUnit(arg1)
+            safeDirty = true
         else
             dirty = true
         end
