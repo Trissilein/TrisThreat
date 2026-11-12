@@ -21,6 +21,9 @@ ns.defaults = {
     stripText = true,    -- strip mode shows the number at its right end
     glow = true,         -- pulsing red halo: tank lost aggro, or anybody else pulled it
     colorBar = false,    -- also tint the nameplate health bar
+    glowReach = 40,      -- glow size outwards from the bar, in px (10..80)
+    glowStrength = 90,   -- glow brightness at the bar, percent (10..100)
+    glowFeather = 100,   -- softness: 100 = fades over the whole reach, low = bright almost to a hard edge (5..100)
     safeGlow = true,     -- green halo on the enemy a tank holds and you are not on (non-tanks only)
     onlyInstances = false,
     hideTrivial = true,
@@ -56,6 +59,9 @@ function ns.NormalizeDB(db)
         if db[key] == nil then db[key] = d[key] end
         db[key] = db[key] == true
     end
+    db.glowReach = math.floor(clamp(db.glowReach, 10, 80, d.glowReach) + 0.5)
+    db.glowStrength = math.floor(clamp(db.glowStrength, 10, 100, d.glowStrength) + 0.5)
+    db.glowFeather = math.floor(clamp(db.glowFeather, 5, 100, d.glowFeather) + 0.5)
     db.onlyInstances = db.onlyInstances == true
     db.value, db.offTank = nil, nil -- retired settings: the number is chosen automatically, off-tank color is always on
     db.minimap = type(db.minimap) == "table" and db.minimap or {}
@@ -287,6 +293,16 @@ end
 
 -- Safe target: a tank or pet holds the enemy and you are not on its threat list (nil) or far below the holder (0).
 -- A secret status (false) is never safe. Threat numbers are secret, so this is a yes/no, not a ranking.
+-- Glow profile: how much of the glow covers a point k layers out (k = 1..n); 1 at the bar, 0 past the last layer.
+-- feather (5..100 %): the fade starts at (100 - feather) % of the reach and takes the rest; 100 = fades throughout.
+function ns.GlowCoverage(k, n, feather)
+    if k > n then return 0 end
+    local f = math.max(0.05, math.min(1, (tonumber(feather) or 100) / 100))
+    local t = (k - 1) / n
+    local s = math.max(0, math.min(1, (t - (1 - f)) / f))
+    return (1 - s) ^ 1.6
+end
+
 function ns.IsSafeStatus(status)
     return status == nil or status == 0
 end

@@ -5,7 +5,7 @@ local frame
 local controls = {}       -- refresh functions
 local floatingOnly = {}   -- controls enabled only in floating mode
 
-local WIDTH, HEIGHT = 660, 616
+local WIDTH, HEIGHT = 660, 688
 local COL1, COL2, COLW = 16, 342, 302
 
 -- Same look as the WoWraVox window: dark marble panel, gold corners, thin brown rules.
@@ -64,6 +64,9 @@ local TIPS = {
     ["Preview threat"] = "Try a threat value: the preview above and your current target show it, no combat needed.",
     ["Off-tank"] = "Preview the off-tank color (blue, tanks only).",
     ["Aggro warning glow"] = "A pulsing red glow around the element when it matters: as a tank when you lose the enemy (and no other tank has it), otherwise when you pull it.",
+    ["Reach"] = "How far the glow spreads outwards from the health bar.",
+    ["Strength"] = "How bright the glow is right at the bar (its opacity).",
+    ["Feather"] = "How soft the edge is. 100 % fades smoothly over the whole reach; lower values stay bright longer and then fade faster.",
     ["Safe target glow"] = "A green glow on the enemy that is safest to attack: a group tank or your pet holds it and you are not on its threat list. If the tank is targeting one of them, only that one glows. Not for tanks.",
 }
 
@@ -99,6 +102,40 @@ local function checkbox(parent, text, x, y, key, after)
     end)
     controls[#controls + 1] = function() check:SetChecked(TrisThreatDB[key] == true) end
     return check
+end
+
+-- One row: label left, slider right, value at the end. `after` runs on every change.
+local function compactSlider(parent, text, x, y, key, low, high, step, suffix, after)
+    local fs = label(parent, text, "GameFontNormalSmall")
+    fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 2, y)
+    local valueText = label(parent, "", "GameFontNormalSmall")
+    valueText:SetPoint("TOPRIGHT", parent, "TOPLEFT", x + COLW - 2, y)
+    local s = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
+    s:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 74, y - 2)
+    s:SetSize(COLW - 74 - 48, 16)
+    s:SetMinMaxValues(low, high)
+    s:SetValueStep(step)
+    s:SetObeyStepOnDrag(true)
+    if s.Low then s.Low:SetText("") end
+    if s.High then s.High:SetText("") end
+    local loading = false
+    s:SetScript("OnValueChanged", function(_, value)
+        if loading then return end
+        value = math.floor(value / step + 0.5) * step
+        TrisThreatDB[key] = value
+        valueText:SetText(value .. suffix)
+        ns.ApplyLayout()
+        if after then after() end
+    end)
+    controls[#controls + 1] = function()
+        loading = true
+        s:SetValue(TrisThreatDB[key])
+        valueText:SetText(TrisThreatDB[key] .. suffix)
+        loading = false
+    end
+    addTooltip(s, text)
+    addTooltip(fs, text)
+    return s
 end
 
 local function slider(parent, text, x, y, key, low, high, step)
@@ -398,16 +435,19 @@ end
 -- kind "aggro" (default): red halo around the element; "safe": green halo around the bar. With a target selected
 -- the real plate shows it as well.
 local flashToken = 0
-function ns.FlashGlow(kind)
+ns.glowKind = "aggro" -- the glow the shape sliders show
+function ns.FlashGlow(kind, mockOnly)
     if not mock then return end
+    kind = kind or "aggro"
+    ns.glowKind = kind
     flashToken = flashToken + 1
     local token = flashToken
     if kind == "safe" then
         ns.ShowBroadGlow(mock, "safeGlow", ns.GLOW_GREEN, mock.parts, mock.element)
-        if ns.TestSafeGlow then ns.TestSafeGlow() end
+        if ns.TestSafeGlow and not mockOnly then ns.TestSafeGlow() end
     else
         ns.ShowBroadGlow(mock.element, "warnGlow", ns.GLOW_RED, mock.parts, mock.element)
-        if ns.TestWarn then ns.TestWarn() end
+        if ns.TestWarn and not mockOnly then ns.TestWarn() end
     end
     C_Timer.After(1.6, function()
         if token ~= flashToken then return end
@@ -578,6 +618,15 @@ local function build()
         if ns.ApplyMinimap then ns.ApplyMinimap() end
     end)
     frame.minimapShow = mini
+    yr = yr - 34
+
+    -- Glow shape: applies to both glows; the preview shows the one last tested while a slider moves.
+    heading(frame, "Glow shape", COL2, yr); yr = yr - 26
+    for _, s in ipairs({ { "Reach", "glowReach", 10, 80, 2, " px" }, { "Strength", "glowStrength", 10, 100, 5, " %" },
+        { "Feather", "glowFeather", 5, 100, 5, " %" } }) do
+        compactSlider(frame, s[1], COL2, yr, s[2], s[3], s[4], s[5], s[6], function() ns.FlashGlow(ns.glowKind, true) end)
+        yr = yr - 28
+    end
 
     frame:SetScript("OnHide", ns.HidePreview)
     frame:SetScript("OnShow", function()

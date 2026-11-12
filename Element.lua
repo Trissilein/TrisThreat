@@ -60,31 +60,41 @@ function ns.CreateElement()
     return el
 end
 
--- Glow around the health bar shaped like a pill (rounded ends): 20 nested pills, each one 2 px bigger than the
--- last, each adding a little light (ADD blend), so the sum fades smoothly from bright at the bar to nothing.
+-- Glow around the health bar shaped like a pill (rounded ends): 24 nested pills, each one a bit bigger than the
+-- last (settings: reach, strength, feather), each adding a little light (ADD blend), so the sum fades smoothly from bright at the bar to nothing.
 -- A pill = a rectangle plus two half circles (circle mask). The light is in the color values, not the alpha
 -- (alpha is not reliable with ADD). Red for the aggro warning, green for the safe target.
 ns.GLOW_RED, ns.GLOW_GREEN = { 1, 0.12, 0.05 }, { 0.18, 0.85, 0.30 }
-local GLOW_LAYERS, GLOW_STEP, GLOW_PEAK = 20, 2, 0.9
+local GLOW_LAYERS = 24
 local GLOW_GAP = 2 -- starts just outside the bar's own border
 local CIRCLE = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 
--- Light of layer i: coverage P(i) of a point i layers out is (1 - (i-1)/N)^1.6; a layer adds P(i) - P(i+1).
+-- Light of layer i: a point k layers out is covered by all layers >= k, so a layer adds cover(i) - cover(i + 1).
 local function layerLight(i)
-    local function cover(k) return k > GLOW_LAYERS and 0 or (1 - (k - 1) / GLOW_LAYERS) ^ 1.6 end
-    return (cover(i) - cover(i + 1)) * GLOW_PEAK
+    local db = TrisThreatDB
+    local peak = (db.glowStrength or 90) / 100
+    local feather = db.glowFeather or 100
+    return (ns.GlowCoverage(i, GLOW_LAYERS, feather) - ns.GlowCoverage(i + 1, GLOW_LAYERS, feather)) * peak
+end
+
+-- Applies the strength/feather settings to a glow's layers.
+local function colorGlow(g)
+    for i, layer in ipairs(g.layers) do
+        local c = layerLight(i)
+        for _, region in ipairs({ layer.center, layer.left, layer.right }) do
+            region:SetVertexColor(g.color[1] * c, g.color[2] * c, g.color[3] * c, 1)
+        end
+    end
 end
 
 function ns.CreateBroadGlow(color)
     local f = CreateFrame("Frame", nil, UIParent)
-    f.layers = {}
+    f.layers, f.color = {}, color
     for i = 1, GLOW_LAYERS do
-        local c = layerLight(i)
         local function part(masked)
             local t = f:CreateTexture(nil, "BACKGROUND")
             t:SetTexture(WHITE)
             t:SetBlendMode("ADD")
-            t:SetVertexColor(color[1] * c, color[2] * c, color[3] * c, 1)
             local m
             if masked then
                 m = f:CreateMaskTexture()
@@ -108,14 +118,15 @@ function ns.CreateBroadGlow(color)
     return f
 end
 
--- Lays the pills out for a glow frame of w x h: every layer grows by GLOW_STEP, its ends are half circles of
+-- Lays the pills out for a glow frame of w x h: every layer grows by reach / layers, its ends are half circles of
 -- radius h/2 + growth (a left and a right cap, each cut at the pill's middle section).
 local function layoutGlow(g, w, h)
     g.layW, g.layH = w, h
     w = math.max(w, h)
     local half = h / 2
+    local step = (TrisThreatDB.glowReach or 40) / GLOW_LAYERS
     for i, layer in ipairs(g.layers) do
-        local e = (i - 1) * GLOW_STEP
+        local e = (i - 1) * step
         local full = h + 2 * e
         local function put(region, p1, rel1, x1, y1, p2, rel2, x2, y2)
             region:ClearAllPoints()
@@ -157,6 +168,9 @@ function ns.PlaceBroadGlow(g, parts, el)
         local m = ns.Measure(parts)
         w, h = m.barW + 2 * GLOW_GAP, m.barH + 2 * GLOW_GAP
     end
+    local db = TrisThreatDB
+    local style = (db.glowReach or 40) .. ":" .. (db.glowStrength or 90) .. ":" .. (db.glowFeather or 100)
+    if g.style ~= style then g.style = style; colorGlow(g); g.layW = nil end -- settings changed: recolor, relayout
     if g.layW ~= w or g.layH ~= h then layoutGlow(g, w, h) end
 end
 

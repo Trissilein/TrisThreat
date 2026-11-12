@@ -29,6 +29,14 @@ check("no candidates: nothing", next(ns.PickSafe({})) == nil)
 check("safeGlow defaults on and normalizes", ns.NormalizeDB({}).safeGlow == true
     and ns.NormalizeDB({ safeGlow = false }).safeGlow == false)
 
+-- Glow settings and profile
+local gd = ns.NormalizeDB({ glowReach = 500, glowStrength = 1, glowFeather = "x" })
+check("glow settings are clamped and defaulted", gd.glowReach == 80 and gd.glowStrength == 10 and gd.glowFeather == 100)
+check("glow coverage: full at the bar, none past the reach", ns.GlowCoverage(1, 24, 100) == 1 and ns.GlowCoverage(25, 24, 100) == 0)
+check("glow coverage falls monotonically", ns.GlowCoverage(6, 24, 100) > ns.GlowCoverage(12, 24, 100)
+    and ns.GlowCoverage(12, 24, 100) > ns.GlowCoverage(20, 24, 100))
+check("low feather stays bright, then drops", ns.GlowCoverage(12, 24, 10) == 1 and ns.GlowCoverage(24, 24, 10) < 0.5)
+
 -- Role resolution
 local function api(tank, group, spec)
     return { tankAura = function() return tank end, groupRole = function() return group end, specRole = function() return spec end }
