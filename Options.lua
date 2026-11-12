@@ -49,8 +49,8 @@ end
 
 -- Hover help for every control, keyed by the control's label.
 local TIPS = {
-    ["Mode"] = "How the threat value appears on the nameplate: as a second level badge, as a segment inside the health bar, as a thin threat bar above or below it, or as a capsule you place freely.",
-    ["Side"] = "Where the element sits. Badge: left, right, top or bottom of the health bar. Segment: left or right end of the bar. Strip: above or below the bar. Ignored by the floating capsule.",
+    ["Mode"] = "How the threat value appears on the nameplate: as a second level badge, as a segment inside the health bar, as a thin threat bar above or below it, or as a freely placed element.",
+    ["Side"] = "Where the element sits. Badge: left, right, top or bottom of the health bar. Segment: left or right end of the bar. Strip: above or below the bar. Ignored by free placement.",
     ["Make room (move nameplate elements aside)"] = "Moves the nameplate's name, raid icon, elite dragon, crowd-control icons or health text aside so nothing overlaps the element. Blizzard nameplates only.",
     ["Color the number"] = "The threat number takes the threat color (green at 0 %, red at 100 %).",
     ["Color the background"] = "The badge or segment background takes the threat color. With a colored number as well, the background uses a darker shade so the number stays readable.",
@@ -59,10 +59,10 @@ local TIPS = {
     ["Off-tank color"] = "As a tank: when another tank or your pet holds the enemy, show blue instead of red.",
     ["Role"] = "Decides the color direction. Automatic detects tanks by stance, form or aura, then by group role or specialization. As a tank, holding the enemy is green; otherwise it is red.",
     ["Value"] = "Scaled: 100 % = you pull aggro. Raw: your share of the current tank's threat (can exceed 100 %). Lead: as a tank, your lead over the next player.",
-    ["Horizontal offset"] = "Floating capsule only: moves it left (negative) or right (positive), up to 100 pixels.",
-    ["Vertical offset"] = "Floating capsule only: moves it down (negative) or up (positive), up to 100 pixels.",
-    ["Size"] = "Floating capsule only: scales it from half to double size.",
-    ["Reset position"] = "Floating capsule only: back to the bar's top-left corner at normal size.",
+    ["Horizontal offset"] = "Free placement only: moves it left (negative) or right (positive), up to 100 pixels.",
+    ["Vertical offset"] = "Free placement only: moves it down (negative) or up (positive), up to 100 pixels.",
+    ["Size"] = "Free placement only: scales it from half to double size.",
+    ["Reset position"] = "Free placement only: back to the bar's top-left corner at normal size.",
     ["Enabled"] = "Turns TrisThreat on or off.",
     ["Only in instances"] = "Show the element only in dungeons, raids and other instances.",
     ["Hide on trivial mobs"] = "No element on trivial or minor enemies.",
@@ -368,7 +368,7 @@ local function build()
         { value = "badge", text = "Badge (like the level badge)" },
         { value = "segment", text = "Segment in the health bar" },
         { value = "strip", text = "Strip above or below the bar" },
-        { value = "floating", text = "Floating capsule" },
+        { value = "floating", text = "Free placement" },
     }); yl = yl - 34
     dropdown(frame, "Side", COL1, yl, "side", {
         { value = "right", text = "Right" }, { value = "left", text = "Left" },
@@ -407,7 +407,7 @@ local function build()
         { value = "lead", text = "Lead over the next player (tank)" },
     }); yr = yr - 40
 
-    heading(frame, "Floating capsule", COL2, yr); yr = yr - 26
+    heading(frame, "Free placement", COL2, yr); yr = yr - 26
     floatingOnly[#floatingOnly + 1] = slider(frame, "Horizontal offset", COL2, yr, "offsetX", -ns.OFFSET_LIMIT, ns.OFFSET_LIMIT, 1); yr = yr - 46
     floatingOnly[#floatingOnly + 1] = slider(frame, "Vertical offset", COL2, yr, "offsetY", -ns.OFFSET_LIMIT, ns.OFFSET_LIMIT, 1); yr = yr - 46
     floatingOnly[#floatingOnly + 1] = slider(frame, "Size", COL2, yr, "scale", 0.5, 2, 0.1); yr = yr - 44
