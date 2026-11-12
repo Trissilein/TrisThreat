@@ -5,7 +5,7 @@ local frame
 local controls = {}       -- refresh functions
 local floatingOnly = {}   -- controls enabled only in floating mode
 
-local WIDTH, HEIGHT = 660, 590
+local WIDTH, HEIGHT = 660, 616
 local COL1, COL2, COLW = 16, 342, 302
 
 -- Same look as the WoWraVox window: dark marble panel, gold corners, thin brown rules.
@@ -393,16 +393,31 @@ local function buildMock(parent, y)
     ns.mock = mock
 end
 
--- Plays the aggro glow once in the preview (when the glow checkbox is toggled), then restores the real state.
+-- Plays a glow once in the preview (when its checkbox is toggled or Test is pressed), then restores the real state.
+-- kind "aggro" (default): red halo around the element; "safe": green halo around the bar. With a target selected
+-- the real plate shows it as well.
 local flashToken = 0
-function ns.FlashGlow()
+function ns.FlashGlow(kind)
     if not mock then return end
-    local el = mock.element
-    el.glow:Show()
-    if not el.pulse:IsPlaying() then el.pulse:Play() end
     flashToken = flashToken + 1
     local token = flashToken
-    C_Timer.After(1.6, function() if token == flashToken then ns.RefreshMock() end end)
+    if kind == "safe" then
+        mock.safe = mock.safe or ns.CreateSafeGlow()
+        ns.PlaceSafeGlow(mock.safe, mock.parts)
+        mock.safe:Show()
+        if not mock.safe.pulse:IsPlaying() then mock.safe.pulse:Play() end
+        if ns.TestSafeGlow then ns.TestSafeGlow() end
+    else
+        local el = mock.element
+        el.glow:Show()
+        if not el.pulse:IsPlaying() then el.pulse:Play() end
+        if ns.TestWarn then ns.TestWarn() end
+    end
+    C_Timer.After(1.6, function()
+        if token ~= flashToken then return end
+        if mock.safe then mock.safe.pulse:Stop(); mock.safe:Hide() end
+        ns.RefreshMock()
+    end)
 end
 
 function ns.RefreshMock()
@@ -502,16 +517,27 @@ local function build()
     heading(frame, "Colors", COL1, yl); yl = yl - 24
     -- One checkbox per row: two columns clipped the longer labels under their neighbour.
     for _, c in ipairs({ { "Color the number", "colorText" }, { "Color the background", "colorBackground" },
-        { "Color the nameplate bar", "colorBar" }, { "Number on the strip", "stripText" },
-        { "Aggro warning glow", "glow" }, { "Safe target glow", "safeGlow" } }) do
-        -- The glow only shows in a warning state: play it once when toggled so the setting can be seen.
-        checkbox(frame, c[1], COL1, yl, c[2], c[2] == "glow" and ns.FlashGlow or nil); yl = yl - 24
+        { "Color the nameplate bar", "colorBar" }, { "Number on the strip", "stripText" } }) do
+        checkbox(frame, c[1], COL1, yl, c[2]); yl = yl - 24
     end
     yl = yl - 6
     local legend = label(frame, "Green at 0 % threat, red at 100 %. As a tank holding the enemy, it follows your lead: full and green with a big lead, shrinking and turning red as the next player closes in.", "GameFontNormalSmall")
     legend:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 2, yl)
     legend:SetWidth(COLW)
     legend:SetJustifyH("LEFT")
+    yl = yl - 54
+
+    -- Glows: each one can be switched on or off and tried with Test (preview, and the real target plate).
+    heading(frame, "Glows", COL1, yl); yl = yl - 24
+    for _, g in ipairs({ { "Aggro warning glow", "glow", "aggro" }, { "Safe target glow", "safeGlow", "safe" } }) do
+        checkbox(frame, g[1], COL1, yl, g[2], function() ns.FlashGlow(g[3]) end)
+        local test = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        test:SetSize(60, 22)
+        test:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + COLW - 62, yl + 1)
+        test:SetText(L["Test"])
+        test:SetScript("OnClick", function() ns.FlashGlow(g[3]) end)
+        yl = yl - 26
+    end
 
     -- Right column: role, value, floating position, filters
     local yr = -236

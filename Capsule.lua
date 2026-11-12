@@ -350,6 +350,25 @@ local function targetedBy(holder, unit)
     return same ~= nil and not issecretvalue(same) and same == true
 end
 
+-- Settings "Test" button: shows the safe halo on the current target for a moment, whatever its real threat.
+local testUnit
+function ns.TestSafeGlow()
+    local plate = C_NamePlate.GetNamePlateForUnit("target")
+    local unit = plate and plateUnit(plate)
+    if not unit then return false end
+    testUnit = unit
+    ns.RefreshSafe()
+    C_Timer.After(1.6, function() testUnit = nil; ns.RefreshSafe() end)
+    return true
+end
+
+-- Settings "Test" button: the target's preview element shows the aggro glow for a moment.
+function ns.TestWarn()
+    ns.warnTest = true
+    ns.ShowPreview()
+    C_Timer.After(1.6, function() ns.warnTest = nil; ns.ShowPreview() end)
+end
+
 function ns.RefreshSafe()
     local db = TrisThreatDB
     local plates, candidates = {}, {}
@@ -374,6 +393,7 @@ function ns.RefreshSafe()
         end
     end
     local picks = ns.PickSafe(candidates)
+    if testUnit and plates[testUnit] then picks[testUnit] = true end
     for unit, plate in pairs(plates) do setSafe(unit, plate, picks[unit]) end
     for unit in pairs(safeGlows) do
         if not plates[unit] then setSafe(unit, nil, false) end

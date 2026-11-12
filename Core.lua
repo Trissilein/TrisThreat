@@ -256,6 +256,7 @@ end
 
 -- Preview: warn at the bad end of the slider (tank near 0 %, everybody else near 100 %).
 function ns.PreviewWarn()
+    if ns.warnTest then return true end -- the Test button
     if ns.previewOffTank then return false end
     local tank = ns.GetRole() == "tank"
     local percent = ns.previewPercent or 0

@@ -142,6 +142,10 @@ check("dropping elsewhere places freely, far to the right", TrisThreatDB.mode ==
 TrisThreatDB.mode, TrisThreatDB.side, TrisThreatDB.offsetX, TrisThreatDB.offsetY = "badge", "right", 0, 0
 ns.FlashGlow()
 check("flashing the glow runs and restores the preview", true)
+ns.FlashGlow("safe")
+check("flashing the safe glow runs, tests the target and cleans up", ns.safeGlows.nameplate1 == nil and ns.warnTest == nil)
+ns.TestWarn()
+check("the aggro Test button forces and clears the warning", ns.warnTest == nil)
 
 -- room bookkeeping: switching back to floating leaves nothing applied
 TrisThreatDB.mode = "badge"; TrisThreatDB.side = "left"
