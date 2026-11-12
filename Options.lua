@@ -59,8 +59,6 @@ local TIPS = {
     ["Off-tank color"] = "As a tank: when another tank or your pet holds the enemy, show blue instead of red.",
     ["Role"] = "Decides the color direction. Automatic detects tanks by stance, form or aura, then by group role or specialization. As a tank, holding the enemy is green; otherwise it is red.",
     ["Value"] = "Scaled: 100 % = you pull aggro. Raw: your share of the current tank's threat (can exceed 100 %). Lead: as a tank, your lead over the next player.",
-    ["Horizontal offset"] = "Free placement only: moves it left (negative) or right (positive), up to 100 pixels.",
-    ["Vertical offset"] = "Free placement only: moves it down (negative) or up (positive), up to 100 pixels.",
     ["Size"] = "Free placement only: scales it from half to double size.",
     ["Reset position"] = "Free placement only: back to the bar's top-left corner at normal size.",
     ["Enabled"] = "Turns TrisThreat on or off.",
@@ -274,6 +272,28 @@ local function buildMock(parent, y)
 
     mock = { panel = panel, uf = uf, bar = bar, element = ns.CreateElement() }
     mock.parts = { uf = uf, bar = bar, level = level, mock = true }
+
+    -- Free placement: drag the element in the preview; the offsets follow the cursor (what you see is what you get).
+    local dragger = CreateFrame("Frame")
+    local el = mock.element
+    el:RegisterForDrag("LeftButton")
+    el:SetScript("OnDragStart", function()
+        local db = TrisThreatDB
+        local sx, sy = GetCursorPosition()
+        local x0, y0 = db.offsetX or 0, db.offsetY or 0
+        dragger:SetScript("OnUpdate", function()
+            local cx, cy = GetCursorPosition()
+            local es = uf:GetEffectiveScale()
+            local nx = ns.ClampOffset(x0 + (cx - sx) / es)
+            local ny = ns.ClampOffset(y0 + (cy - sy) / es)
+            if nx ~= db.offsetX or ny ~= db.offsetY then
+                db.offsetX, db.offsetY = nx, ny
+                ns.ApplyLayout()
+                ns.RefreshMock()
+            end
+        end)
+    end)
+    el:SetScript("OnDragStop", function() dragger:SetScript("OnUpdate", nil) end)
 end
 
 function ns.RefreshMock()
@@ -284,6 +304,7 @@ function ns.RefreshMock()
     local barColor = db.colorBar and color or { 0.78, 0.12, 0.12 }
     mock.bar:SetStatusBarColor(barColor[1], barColor[2], barColor[3])
     ns.Arrange(mock.element, mock.parts)
+    mock.element:EnableMouse(db.mode == "floating")
     ns.PaintElement(mock.element, color, ns.previewPercent .. "%", ns.previewPercent, true, 0, 100, ns.PreviewWarn())
     if mock.percentText then mock.percentText:SetText(ns.previewPercent .. "%") end
 end
@@ -408,8 +429,11 @@ local function build()
     }); yr = yr - 40
 
     heading(frame, "Free placement", COL2, yr); yr = yr - 26
-    floatingOnly[#floatingOnly + 1] = slider(frame, "Horizontal offset", COL2, yr, "offsetX", -ns.OFFSET_LIMIT, ns.OFFSET_LIMIT, 1); yr = yr - 46
-    floatingOnly[#floatingOnly + 1] = slider(frame, "Vertical offset", COL2, yr, "offsetY", -ns.OFFSET_LIMIT, ns.OFFSET_LIMIT, 1); yr = yr - 46
+    local drag = label(frame, "Drag the element in the preview above to place it.", "GameFontNormalSmall")
+    drag:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2 + 2, yr)
+    drag:SetWidth(COLW)
+    drag:SetJustifyH("LEFT")
+    floatingOnly[#floatingOnly + 1] = drag; yr = yr - 28
     floatingOnly[#floatingOnly + 1] = slider(frame, "Size", COL2, yr, "scale", 0.5, 2, 0.1); yr = yr - 44
     local reset = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     reset:SetSize(140, 22)
