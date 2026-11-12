@@ -60,30 +60,44 @@ function ns.CreateElement()
     return el
 end
 
--- Glow along the outline of the health bar: a thick, bright, smoothly fading halo made of 1 px strips of plain
--- white (no texture file that might be missing), pulsing. Red for the aggro warning, green for the safe target.
+-- Glow around the health bar shaped like a pill (rounded ends): 20 nested pills, each one 2 px bigger than the
+-- last, each adding a little light (ADD blend), so the sum fades smoothly from bright at the bar to nothing.
+-- A pill = a rectangle plus two half circles (circle mask). The light is in the color values, not the alpha
+-- (alpha is not reliable with ADD). Red for the aggro warning, green for the safe target.
 ns.GLOW_RED, ns.GLOW_GREEN = { 1, 0.12, 0.05 }, { 0.18, 0.85, 0.30 }
-local GLOW_LAYERS, GLOW_STEP = 40, 1
+local GLOW_LAYERS, GLOW_STEP, GLOW_PEAK = 20, 2, 0.9
 local GLOW_GAP = 2 -- starts just outside the bar's own border
+local CIRCLE = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+
+-- Light of layer i: coverage P(i) of a point i layers out is (1 - (i-1)/N)^1.6; a layer adds P(i) - P(i+1).
+local function layerLight(i)
+    local function cover(k) return k > GLOW_LAYERS and 0 or (1 - (k - 1) / GLOW_LAYERS) ^ 1.6 end
+    return (cover(i) - cover(i + 1)) * GLOW_PEAK
+end
 
 function ns.CreateBroadGlow(color)
     local f = CreateFrame("Frame", nil, UIParent)
+    f.layers = {}
     for i = 1, GLOW_LAYERS do
-        -- Gaussian-like falloff: full strength at the bar, a long soft tail outwards, no visible edge.
-        local alpha = math.exp(-(((i - 1) / GLOW_LAYERS) * 2.6) ^ 2)
-        local d0, d1 = (i - 1) * GLOW_STEP, i * GLOW_STEP
-        local function strip(p1, rel1, x1, y1, p2, rel2, x2, y2)
+        local c = layerLight(i)
+        local function part(masked)
             local t = f:CreateTexture(nil, "BACKGROUND")
             t:SetTexture(WHITE)
             t:SetBlendMode("ADD")
-            t:SetVertexColor(color[1], color[2], color[3], alpha)
-            t:SetPoint(p1, f, rel1, x1, y1)
-            t:SetPoint(p2, f, rel2, x2, y2)
+            t:SetVertexColor(color[1] * c, color[2] * c, color[3] * c, 1)
+            local m
+            if masked then
+                m = f:CreateMaskTexture()
+                m:SetTexture(CIRCLE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+                t:AddMaskTexture(m)
+            end
+            return t, m
         end
-        strip("BOTTOMLEFT", "TOPLEFT", -d1, d0, "TOPRIGHT", "TOPRIGHT", d1, d1)           -- top, with the corners
-        strip("TOPLEFT", "BOTTOMLEFT", -d1, -d0, "BOTTOMRIGHT", "BOTTOMRIGHT", d1, -d1)   -- bottom, with the corners
-        strip("TOPRIGHT", "TOPLEFT", -d0, d0, "BOTTOMLEFT", "BOTTOMLEFT", -d1, -d0)       -- left side
-        strip("TOPLEFT", "TOPRIGHT", d0, d0, "BOTTOMRIGHT", "BOTTOMRIGHT", d1, -d0)       -- right side
+        local layer = {}
+        layer.center = part(false)
+        layer.left, layer.leftMask = part(true)
+        layer.right, layer.rightMask = part(true)
+        f.layers[i] = layer
     end
     f.pulse = f:CreateAnimationGroup()
     f.pulse:SetLooping("BOUNCE")
@@ -92,6 +106,28 @@ function ns.CreateBroadGlow(color)
     fade:SetToAlpha(1)
     fade:SetDuration(0.55)
     return f
+end
+
+-- Lays the pills out for a glow frame of w x h: every layer grows by GLOW_STEP, its ends are half circles of
+-- radius h/2 + growth (a left and a right cap, each cut at the pill's middle section).
+local function layoutGlow(g, w, h)
+    g.layW, g.layH = w, h
+    w = math.max(w, h)
+    local half = h / 2
+    for i, layer in ipairs(g.layers) do
+        local e = (i - 1) * GLOW_STEP
+        local full = h + 2 * e
+        local function put(region, p1, rel1, x1, y1, p2, rel2, x2, y2)
+            region:ClearAllPoints()
+            region:SetPoint(p1, g, rel1, x1, y1)
+            region:SetPoint(p2, g, rel2, x2, y2)
+        end
+        put(layer.center, "TOPLEFT", "TOPLEFT", half, e, "BOTTOMRIGHT", "TOPRIGHT", -half, -(h + e))
+        put(layer.left, "TOPLEFT", "TOPLEFT", -e, e, "BOTTOMRIGHT", "TOPLEFT", half, -(h + e))
+        put(layer.leftMask, "TOPLEFT", "TOPLEFT", -e, e, "BOTTOMRIGHT", "TOPLEFT", -e + full, e - full)
+        put(layer.right, "TOPLEFT", "TOPRIGHT", -half, e, "BOTTOMRIGHT", "TOPRIGHT", e, -(h + e))
+        put(layer.rightMask, "TOPLEFT", "TOPRIGHT", e - full, e, "BOTTOMRIGHT", "TOPRIGHT", e, e - full)
+    end
 end
 
 -- el (optional): the threat element. In strip mode it is part of the outline, so the glow wraps bar AND strip
@@ -115,6 +151,13 @@ function ns.PlaceBroadGlow(g, parts, el)
         g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -GLOW_GAP, GLOW_GAP)
         g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", GLOW_GAP, -GLOW_GAP)
     end
+    -- The pills need the frame's size; if the engine has not resolved the anchors yet, use the bar's size.
+    local w, h = g:GetWidth(), g:GetHeight()
+    if type(w) ~= "number" or type(h) ~= "number" or w < 2 or h < 2 then
+        local m = ns.Measure(parts)
+        w, h = m.barW + 2 * GLOW_GAP, m.barH + 2 * GLOW_GAP
+    end
+    if g.layW ~= w or g.layH ~= h then layoutGlow(g, w, h) end
 end
 
 -- A glow kept on `owner[key]` (an element, so each plate has its own). el = the threat element, see above.
