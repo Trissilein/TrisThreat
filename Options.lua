@@ -5,7 +5,7 @@ local frame
 local controls = {}       -- refresh functions
 local floatingOnly = {}   -- controls enabled only in floating mode
 
-local WIDTH, HEIGHT = 660, 688
+local WIDTH, HEIGHT = 660, 704
 local COL1, COL2, COLW = 16, 342, 302
 
 -- Same look as the WoWraVox window: dark marble panel, gold corners, thin brown rules.
@@ -33,6 +33,8 @@ end
 local function label(parent, text, template)
     local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
     fs:SetText(L[text] or text)
+    -- Explanations and values in a muted, desaturated gold; labels stay white, headings gold.
+    if template == "GameFontNormalSmall" then fs:SetTextColor(0.76, 0.72, 0.6) end
     return fs
 end
 
@@ -41,6 +43,8 @@ local function heading(parent, text, x, y)
     fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 2, y)
     local rule = parent:CreateTexture(nil, "BORDER")
     rule:SetColorTexture(0.35, 0.29, 0.18, 0.78)
+    -- Snap to whole screen pixels: at a fractional window scale a 1 px rule would otherwise look 2 px thick.
+    if rule.SetSnapToPixelGrid then rule:SetSnapToPixelGrid(true); rule:SetTexelSnappingBias(0) end
     rule:SetHeight(1)
     rule:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 16)
     rule:SetWidth(COLW)
@@ -106,7 +110,7 @@ end
 
 -- One row: label left, slider right, value at the end. `after` runs on every change.
 local function compactSlider(parent, text, x, y, key, low, high, step, suffix, after)
-    local fs = label(parent, text, "GameFontNormalSmall")
+    local fs = label(parent, text, "GameFontHighlightSmall") -- white like the other labels
     fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 2, y)
     local valueText = label(parent, "", "GameFontNormalSmall")
     valueText:SetPoint("TOPRIGHT", parent, "TOPLEFT", x + COLW - 2, y)
@@ -541,15 +545,18 @@ local function build()
         ns.ShowPreview()
     end)
 
-    -- Left column: display, colors, role and value
-    local yl = -236
+    -- Both columns share the same section rows, so every heading and rule sits at the same height.
+    local ROW1, ROW2, ROW3 = -236, -344, -520
+    -- Left column: display, colors, glows
+    local yl = ROW1
     heading(frame, "Display", COL1, yl); yl = yl - 28
     local drag = label(frame, "Drag the element in the preview. Dots mark where it snaps: to a badge position, or into the strip above or below the bar. Anywhere else places it freely.", "GameFontNormalSmall")
     drag:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 2, yl + 4)
     drag:SetWidth(COLW)
     drag:SetJustifyH("LEFT"); yl = yl - 48
-    checkbox(frame, "Make room (move nameplate elements aside)", COL1, yl, "makeRoom"); yl = yl - 34
+    checkbox(frame, "Make room (move nameplate elements aside)", COL1, yl, "makeRoom")
 
+    yl = ROW2
     heading(frame, "Colors", COL1, yl); yl = yl - 24
     -- One checkbox per row: two columns clipped the longer labels under their neighbour.
     for _, c in ipairs({ { "Color the number", "colorText" }, { "Color the background", "colorBackground" },
@@ -561,9 +568,9 @@ local function build()
     legend:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 2, yl)
     legend:SetWidth(COLW)
     legend:SetJustifyH("LEFT")
-    yl = yl - 54
 
     -- Glows: each one can be switched on or off and tried with Test (preview, and the real target plate).
+    yl = ROW3
     heading(frame, "Glows", COL1, yl); yl = yl - 24
     for _, g in ipairs({ { "Aggro warning glow", "glow", "aggro" }, { "Safe target glow", "safeGlow", "safe" } }) do
         checkbox(frame, g[1], COL1, yl, g[2], function() ns.FlashGlow(g[3]) end)
@@ -574,9 +581,16 @@ local function build()
         test:SetScript("OnClick", function() ns.FlashGlow(g[3]) end)
         yl = yl - 26
     end
+    yl = yl - 4
+    -- Shape of both glows; the preview shows the one tested last while a slider moves.
+    for _, s in ipairs({ { "Reach", "glowReach", 10, 80, 2, " px" }, { "Strength", "glowStrength", 10, 100, 5, " %" },
+        { "Feather", "glowFeather", 5, 100, 5, " %" } }) do
+        compactSlider(frame, s[1], COL1, yl, s[2], s[3], s[4], s[5], s[6], function() ns.FlashGlow(ns.glowKind, true) end)
+        yl = yl - 28
+    end
 
-    -- Right column: role, value, floating position, filters
-    local yr = -236
+    -- Right column: role, floating position, general
+    local yr = ROW1
     heading(frame, "Role and value", COL2, yr); yr = yr - 28
     dropdown(frame, "Role", COL2, yr, "role", {
         { value = "auto", text = "Automatic" }, { value = "tank", text = "Tank" },
@@ -586,9 +600,8 @@ local function build()
     ns.detectedText:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2 + 2, yr)
     ns.detectedText:SetWidth(COLW)
     ns.detectedText:SetJustifyH("LEFT")
-    yr = yr - 18
-    yr = yr - 22
 
+    yr = ROW2
     heading(frame, "Free position", COL2, yr); yr = yr - 26
     floatingOnly[#floatingOnly + 1] = slider(frame, "Size", COL2, yr, "scale", 0.5, 2, 0.1); yr = yr - 44
     local reset = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -601,8 +614,8 @@ local function build()
         onLayoutChanged()
     end)
     floatingOnly[#floatingOnly + 1] = reset
-    yr = yr - 34
 
+    yr = ROW3
     heading(frame, "General", COL2, yr); yr = yr - 24
     checkbox(frame, "Enable TrisThreat", COL2, yr, "enabled"); yr = yr - 26
     checkbox(frame, "Only in instances", COL2, yr, "onlyInstances")
@@ -618,15 +631,6 @@ local function build()
         if ns.ApplyMinimap then ns.ApplyMinimap() end
     end)
     frame.minimapShow = mini
-    yr = yr - 34
-
-    -- Glow shape: applies to both glows; the preview shows the one last tested while a slider moves.
-    heading(frame, "Glow shape", COL2, yr); yr = yr - 26
-    for _, s in ipairs({ { "Reach", "glowReach", 10, 80, 2, " px" }, { "Strength", "glowStrength", 10, 100, 5, " %" },
-        { "Feather", "glowFeather", 5, 100, 5, " %" } }) do
-        compactSlider(frame, s[1], COL2, yr, s[2], s[3], s[4], s[5], s[6], function() ns.FlashGlow(ns.glowKind, true) end)
-        yr = yr - 28
-    end
 
     frame:SetScript("OnHide", ns.HidePreview)
     frame:SetScript("OnShow", function()
