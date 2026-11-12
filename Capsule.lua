@@ -340,7 +340,7 @@ local function setSafe(unit, plate, on)
         return
     end
     if not g then g = table.remove(safePool) or ns.CreateBroadGlow(ns.GLOW_GREEN); safeGlows[unit] = g end
-    ns.PlaceBroadGlow(g, getParts(plate))
+    ns.PlaceBroadGlow(g, getParts(plate), active[unit])
     g:Show()
     if not g.pulse:IsPlaying() then g.pulse:Play() end
 end

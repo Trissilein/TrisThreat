@@ -63,13 +63,14 @@ end
 -- Glow along the outline of the health bar: a thick, bright, smoothly fading halo made of 1 px strips of plain
 -- white (no texture file that might be missing), pulsing. Red for the aggro warning, green for the safe target.
 ns.GLOW_RED, ns.GLOW_GREEN = { 1, 0.12, 0.05 }, { 0.18, 0.85, 0.30 }
-local GLOW_LAYERS, GLOW_STEP = 26, 1
+local GLOW_LAYERS, GLOW_STEP = 40, 1
 local GLOW_GAP = 2 -- starts just outside the bar's own border
 
 function ns.CreateBroadGlow(color)
     local f = CreateFrame("Frame", nil, UIParent)
     for i = 1, GLOW_LAYERS do
-        local alpha = 1.0 * (1 - (i - 1) / GLOW_LAYERS) ^ 1.7 -- full strength at the bar, fading smoothly outwards
+        -- Gaussian-like falloff: full strength at the bar, a long soft tail outwards, no visible edge.
+        local alpha = math.exp(-(((i - 1) / GLOW_LAYERS) * 2.6) ^ 2)
         local d0, d1 = (i - 1) * GLOW_STEP, i * GLOW_STEP
         local function strip(p1, rel1, x1, y1, p2, rel2, x2, y2)
             local t = f:CreateTexture(nil, "BACKGROUND")
@@ -93,22 +94,34 @@ function ns.CreateBroadGlow(color)
     return f
 end
 
-function ns.PlaceBroadGlow(g, parts)
+-- el (optional): the threat element. In strip mode it is part of the outline, so the glow wraps bar AND strip
+-- (above or below the bar); badge and segment sit beside or inside the bar and need nothing extra.
+function ns.PlaceBroadGlow(g, parts, el)
     local parent = parts.uf
     g:SetParent(parent)
     g:SetFrameStrata(parent:GetFrameStrata())
     -- On real plates one level behind the plate's own art, so the name and icons stay on top of the light.
     g:SetFrameLevel(parts.mock and parent:GetFrameLevel() or math.max(0, parent:GetFrameLevel() - 1))
     g:ClearAllPoints()
-    g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -GLOW_GAP, GLOW_GAP)
-    g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", GLOW_GAP, -GLOW_GAP)
+    local stripSide = el and el.look == "strip" and el:IsShown()
+        and ns.EffectiveSide(TrisThreatDB.mode, TrisThreatDB.side)
+    if stripSide == "top" then
+        g:SetPoint("TOPLEFT", el, "TOPLEFT", -2 - GLOW_GAP, 3 + GLOW_GAP)
+        g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", GLOW_GAP, -GLOW_GAP)
+    elseif stripSide == "bottom" then
+        g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -GLOW_GAP, GLOW_GAP)
+        g:SetPoint("BOTTOMRIGHT", el, "BOTTOMRIGHT", 6 + GLOW_GAP, -6 - GLOW_GAP)
+    else
+        g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -GLOW_GAP, GLOW_GAP)
+        g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", GLOW_GAP, -GLOW_GAP)
+    end
 end
 
--- A glow kept on `owner[key]` (an element, so each plate has its own).
-function ns.ShowBroadGlow(owner, key, color, parts)
+-- A glow kept on `owner[key]` (an element, so each plate has its own). el = the threat element, see above.
+function ns.ShowBroadGlow(owner, key, color, parts, el)
     local g = owner[key]
     if not g then g = ns.CreateBroadGlow(color); owner[key] = g end
-    ns.PlaceBroadGlow(g, parts)
+    ns.PlaceBroadGlow(g, parts, el)
     g:Show()
     if not g.pulse:IsPlaying() then g.pulse:Play() end
 end
@@ -234,7 +247,7 @@ function ns.PaintElement(el, color, text, value, selected, low, high, glow)
     end
     el.selected:SetShown(selected == true and (el.look == "badge") and el.selected:GetAtlas() ~= nil)
     if glow and db.glow and el.parts then
-        ns.ShowBroadGlow(el, "warnGlow", ns.GLOW_RED, el.parts)
+        ns.ShowBroadGlow(el, "warnGlow", ns.GLOW_RED, el.parts, el)
     else
         ns.HideBroadGlow(el, "warnGlow")
     end

@@ -403,10 +403,10 @@ function ns.FlashGlow(kind)
     flashToken = flashToken + 1
     local token = flashToken
     if kind == "safe" then
-        ns.ShowBroadGlow(mock, "safeGlow", ns.GLOW_GREEN, mock.parts)
+        ns.ShowBroadGlow(mock, "safeGlow", ns.GLOW_GREEN, mock.parts, mock.element)
         if ns.TestSafeGlow then ns.TestSafeGlow() end
     else
-        ns.ShowBroadGlow(mock.element, "warnGlow", ns.GLOW_RED, mock.parts)
+        ns.ShowBroadGlow(mock.element, "warnGlow", ns.GLOW_RED, mock.parts, mock.element)
         if ns.TestWarn then ns.TestWarn() end
     end
     C_Timer.After(1.6, function()
