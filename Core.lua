@@ -413,17 +413,13 @@ function ns.MockZoneRect(mode, side)
     return l, b, l + w, b + spec.h
 end
 
--- Index of the snap spot under (x, y): the closest within a few pixels, the smaller one when spots overlap.
+-- Each snap spot is a dot at the center of its rect. Index of the dot closest to (x, y) within 22 px, or nil.
 function ns.PickMockZone(x, y, rects)
-    local best, bestDist, bestArea
+    local best, bestDist
     for i, r in ipairs(rects) do
-        local dx = math.max(r[1] - x, 0, x - r[3])
-        local dy = math.max(r[2] - y, 0, y - r[4])
+        local dx, dy = (r[1] + r[3]) / 2 - x, (r[2] + r[4]) / 2 - y
         local dist = math.sqrt(dx * dx + dy * dy)
-        local area = (r[3] - r[1]) * (r[4] - r[2])
-        if dist <= 4 and (not best or dist < bestDist or (dist == bestDist and area < bestArea)) then
-            best, bestDist, bestArea = i, dist, area
-        end
+        if dist <= 22 and (not best or dist < bestDist) then best, bestDist = i, dist end
     end
     return best
 end

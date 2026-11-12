@@ -42,7 +42,7 @@ L["Preview threat"] = "Vorschau Threat"
 L["Green at 0 % threat, red at 100 %. As a tank holding the enemy, it follows your lead: full and green with a big lead, shrinking and turning red as the next player closes in."] =
     "Grün bei 0 % Threat, rot bei 100 %. Als Tank, der den Gegner hält, zählt dein Vorsprung: voll und grün bei großem Vorsprung, kürzer und röter, je näher der Nächste kommt."
 L["Display"] = "Darstellung"
-L["Drag the element in the preview. Outlined spots snap it to a badge position or turn it into the strip above or below the bar; anywhere else places it freely."] = "Ziehe das Element in der Vorschau. Umrandete Stellen rasten es als Badge ein oder machen daraus den Streifen über oder unter der Leiste; überall sonst steht es frei."
+L["Drag the element in the preview. Dots mark where it snaps: to a badge position, or into the strip above or below the bar. Anywhere else places it freely."] ="Ziehe das Element in der Vorschau. Punkte markieren, wo es einrastet: als Badge oder als Streifen über oder unter der Leiste. Überall sonst steht es frei."
 L["Free position"] = "Freie Position"
 L["Badge right"] = "Badge rechts"
 L["Badge left"] = "Badge links"

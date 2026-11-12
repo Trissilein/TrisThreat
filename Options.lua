@@ -280,40 +280,75 @@ local function buildMock(parent, y)
     mock.caption:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -6)
     mock.caption:Hide()
     mock.zones = {}
+    -- Every snap spot is one small dot (no overlapping areas); only the spot under the cursor shows its result as
+    -- an outline. At the start of a drag the dots flash once so they read as places to drop on.
     for i, z in ipairs(ns.MOCK_ZONES) do
-        -- A thin outline with a faint fill: the spot stays readable without hiding the nameplate behind it.
-        local f = CreateFrame("Frame", nil, panel, "BackdropTemplate")
+        local f = CreateFrame("Frame", nil, panel)
         f:SetFrameLevel(panel:GetFrameLevel() + 20)
-        f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+        f.tex = f:CreateTexture(nil, "OVERLAY")
+        f.tex:SetAllPoints()
+        f.tex:SetTexture("Interface\\Buttons\\WHITE8X8")
+        local mask = f:CreateMaskTexture()
+        mask:SetAllPoints(f.tex)
+        mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        f.tex:AddMaskTexture(mask)
         f.zone = z
         f:Hide()
         mock.zones[i] = f
     end
+    mock.ghost = CreateFrame("Frame", nil, panel, "BackdropTemplate")
+    mock.ghost:SetFrameLevel(panel:GetFrameLevel() + 19)
+    mock.ghost:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+    mock.ghost:SetBackdropColor(1, 0.82, 0.2, 0.18)
+    mock.ghost:SetBackdropBorderColor(1, 0.82, 0.2, 1)
+    mock.ghost:Hide()
 
     local function paintZones(active)
+        mock.activeZone = active
         for _, f in ipairs(mock.zones) do
-            if f == active then
-                f:SetBackdropColor(1, 0.82, 0.2, 0.28)
-                f:SetBackdropBorderColor(1, 0.82, 0.2, 1)
-            else
-                f:SetBackdropColor(0.6, 0.85, 1, 0.06)
-                f:SetBackdropBorderColor(0.6, 0.85, 1, 0.55)
+            f:SetSize(9, 9)
+            f.tex:SetVertexColor(0.6, 0.85, 1, 0.75)
+            if mock.flashing then
+                f:SetSize(17, 17)
+                f.tex:SetVertexColor(1, 0.95, 0.6, 1)
+            elseif f == active then
+                f:SetSize(13, 13)
+                f.tex:SetVertexColor(1, 0.82, 0.2, 1)
             end
+        end
+        if active and not mock.flashing then
+            local l, b, r, t = active.rect[1], active.rect[2], active.rect[3], active.rect[4]
+            mock.ghost:ClearAllPoints()
+            mock.ghost:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", l, b)
+            mock.ghost:SetSize(r - l, t - b)
+            mock.ghost:Show()
+        else
+            mock.ghost:Hide()
         end
     end
     local function showZones()
+        local fresh = not mock.zonesShown
+        mock.zonesShown = true
         for _, f in ipairs(mock.zones) do
             local l, b, r, t = ns.MockZoneRect(f.zone.mode, f.zone.side)
             f.rect = { l, b, r, t }
             f:ClearAllPoints()
-            f:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", l, b)
-            f:SetSize(r - l, t - b)
+            f:SetPoint("CENTER", panel, "BOTTOMLEFT", (l + r) / 2, (b + t) / 2)
             f:Show()
+        end
+        if fresh then
+            mock.flashing = true
+            C_Timer.After(0.35, function()
+                mock.flashing = false
+                if mock.zonesShown then paintZones(mock.activeZone) end
+            end)
         end
         paintZones(nil)
     end
     local function hideZones()
+        mock.zonesShown, mock.flashing = false, false
         for _, f in ipairs(mock.zones) do f:Hide() end
+        mock.ghost:Hide()
         mock.caption:Hide()
     end
     el:SetScript("OnMouseDown", showZones)
@@ -456,7 +491,7 @@ local function build()
     -- Left column: display, colors, role and value
     local yl = -236
     heading(frame, "Display", COL1, yl); yl = yl - 28
-    local drag = label(frame, "Drag the element in the preview. Outlined spots snap it to a badge position or turn it into the strip above or below the bar; anywhere else places it freely.", "GameFontNormalSmall")
+    local drag = label(frame, "Drag the element in the preview. Dots mark where it snaps: to a badge position, or into the strip above or below the bar. Anywhere else places it freely.", "GameFontNormalSmall")
     drag:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 2, yl + 4)
     drag:SetWidth(COLW)
     drag:SetJustifyH("LEFT"); yl = yl - 56

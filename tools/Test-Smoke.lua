@@ -20,6 +20,7 @@ local returns = {
     GetText = function() return "" end,
     GetStatusBarTexture = function() return Stub() end,
     CreateTexture = function() return Stub() end,
+    CreateMaskTexture = function() return Stub() end,
     CreateFontString = function() return Stub() end,
     GetName = function() return nil end,
     GetStringWidth = function() return 80 end,
@@ -128,7 +129,7 @@ local l, b, r, t = ns.MockZoneRect("badge", "bottom")
 dragTo((l + r) / 2, (b + t) / 2)
 check("dropping on the badge-below spot snaps there", TrisThreatDB.mode == "badge" and TrisThreatDB.side == "bottom")
 l, b, r, t = ns.MockZoneRect("strip", "top")
-dragTo((l + r) / 2 + 40, (b + t) / 2)
+dragTo((l + r) / 2, (b + t) / 2)
 check("dropping on the strip spot turns it into the strip", TrisThreatDB.mode == "strip" and TrisThreatDB.side == "top")
 l, b, r, t = ns.MockZoneRect("badge", "left")
 dragTo((l + r) / 2, (b + t) / 2)
