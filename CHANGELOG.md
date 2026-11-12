@@ -9,4 +9,4 @@
 - Color combinations: number, background, nameplate bar.
 - Settings window with a live copy of the Blizzard nameplate, value mode and filters; while it is open, your target gets a test element without combat.
 - Titan Panel / LibDataBroker display showing the current mode (Tank, DPS or Healer mode; * = set by hand), addon compartment entry and a minimap icon that can be hidden with a right-click.
-- Retail and WoW Forever (beta) in one package.
+- WoW Forever (beta) only; there is no Retail build.

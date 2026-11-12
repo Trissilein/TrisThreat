@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$tocPath = Join-Path $root 'TrisThreat.toc'
+$tocPath = Join-Path $root 'TrisThreat_Camelot.toc'
 $readmePath = Join-Path $root 'README.md'
 $changelogPath = Join-Path $root 'CHANGELOG.md'
 $tag = "v$Version"
@@ -38,8 +38,7 @@ try {
         throw "Tag $tag does not exist. Create and push the release tag before resuming an upload."
     }
 
-    Require-Match $tocPath "(?m)^## Version: $([regex]::Escape($Version))\s*$" 'TrisThreat.toc'
-    Require-Match (Join-Path $root 'TrisThreat_Camelot.toc') "(?m)^## Version: $([regex]::Escape($Version))\s*$" 'TrisThreat_Camelot.toc'
+    Require-Match $tocPath "(?m)^## Version: $([regex]::Escape($Version))\s*$" 'TrisThreat_Camelot.toc'
     Require-Match $readmePath "(?m)^Current stable version: \*\*$([regex]::Escape($Version))\*\*\.\s*$" 'README.md'
     Require-Match $changelogPath "(?m)^##\s+$([regex]::Escape($Version))\s*$" 'CHANGELOG.md'
 

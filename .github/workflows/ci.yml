@@ -28,7 +28,7 @@ jobs:
         name: Read version from TOC
         shell: bash
         run: |
-          version=$(sed -n 's/^## Version: *\([0-9][0-9.]*\).*/\1/p' TrisThreat.toc | head -n1)
+          version=$(sed -n 's/^## Version: *\([0-9][0-9.]*\).*/\1/p' TrisThreat_Camelot.toc | head -n1)
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Release metadata gate
         shell: pwsh

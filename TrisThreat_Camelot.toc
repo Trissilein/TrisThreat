@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## X-Compatible-With: forever
 ## Title: TrisThreat
-## Notes: A small capsule on every enemy nameplate that shows how much threat you hold on that mob.
+## Notes: Shows how much threat you hold on every enemy nameplate, as a badge, bar segment or strip.
 ## Author: Ingo
 ## Version: 0.1.0
 ## IconTexture: Interface\AddOns\TrisThreat\Assets\TrisThreatIcon.tga

@@ -1,4 +1,4 @@
-"""Lua 5.1 syntax + top-level-locals headroom check for every file in TrisThreat.toc and TrisThreat_Camelot.toc (+ tools/*.lua).
+"""Lua 5.1 syntax + top-level-locals headroom check for every file in TrisThreat_Camelot.toc (+ tools/*.lua).
 
 Usage: python tools/Test-LuaSyntax.py      (needs: pip install lupa)
 Exit 1 on any syntax error. Low headroom only warns (WoW limit: 200 locals per function).
@@ -20,7 +20,7 @@ load = rt.eval("function(s, n) local f, e = loadstring(s, n) if f then return ni
 
 def toc_files():
     files = []
-    for toc in ("TrisThreat.toc", "TrisThreat_Camelot.toc"):
+    for toc in ("TrisThreat_Camelot.toc",):
         with open(os.path.join(ROOT, toc), encoding="utf8") as fh:
             for line in fh:
                 line = line.strip().replace("\\", "/")

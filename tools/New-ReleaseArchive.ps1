@@ -10,14 +10,14 @@ $releaseDirectory = Join-Path $root 'release'
 $stagingRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('tristhreat-release-' + [guid]::NewGuid().ToString('N'))
 $addonDirectory = Join-Path $stagingRoot 'TrisThreat'
 $archive = Join-Path $releaseDirectory "TrisThreat-$Version.zip"
-$tocPath = Join-Path $root 'TrisThreat.toc'
+$tocPath = Join-Path $root 'TrisThreat_Camelot.toc'
 
 # Runtime files = the TOC itself + every non-metadata TOC line (so a new .lua can never be forgotten).
-$tocFiles = @(foreach ($toc in 'TrisThreat.toc', 'TrisThreat_Camelot.toc') {
+$tocFiles = @(foreach ($toc in 'TrisThreat_Camelot.toc') {
     Get-Content -LiteralPath (Join-Path $root $toc) | ForEach-Object { $_.Trim() } |
         Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object { $_ -replace '\\', '/' }
 })
-$runtimeFiles = @('TrisThreat.toc', 'TrisThreat_Camelot.toc') + $tocFiles
+$runtimeFiles = @('TrisThreat_Camelot.toc') + $tocFiles
 # Only game-loadable assets ship; source PNGs live in docs/branding/.
 $assetsRoot = Join-Path $root 'Assets'
 $assetFiles = @(Get-ChildItem -LiteralPath $assetsRoot -File |
