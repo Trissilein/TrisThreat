@@ -105,7 +105,7 @@ ns.ToggleOptions()
 check("options window builds and opens", calls.Show ~= nil)
 
 local AdjustBefore = calls.AdjustPointsOffset or 0
-for _, mode in ipairs({ "badge", "segment", "strip", "floating" }) do
+for _, mode in ipairs({ "badge", "strip", "floating" }) do
     for _, side in ipairs({ "left", "right", "top", "bottom" }) do
         TrisThreatDB.mode, TrisThreatDB.side = mode, side
         ns.RefreshOptions()
@@ -124,9 +124,12 @@ local function dragTo(x, y)
     mock.dragger.__script_OnUpdate()
     mock.element.__script_OnDragStop()
 end
-local l, b, r, t = ns.MockZoneRect("strip", "bottom")
+local l, b, r, t = ns.MockZoneRect("badge", "bottom")
 dragTo((l + r) / 2, (b + t) / 2)
-check("dropping on a strip spot snaps to strip below", TrisThreatDB.mode == "strip" and TrisThreatDB.side == "bottom")
+check("dropping on the badge-below spot snaps there", TrisThreatDB.mode == "badge" and TrisThreatDB.side == "bottom")
+l, b, r, t = ns.MockZoneRect("strip", "top")
+dragTo((l + r) / 2 + 40, (b + t) / 2)
+check("dropping on the strip spot turns it into the strip", TrisThreatDB.mode == "strip" and TrisThreatDB.side == "top")
 l, b, r, t = ns.MockZoneRect("badge", "left")
 dragTo((l + r) / 2, (b + t) / 2)
 check("dropping on the badge-left spot snaps there", TrisThreatDB.mode == "badge" and TrisThreatDB.side == "left")

@@ -49,15 +49,14 @@ end
 
 -- Hover help for every control, keyed by the control's label.
 local TIPS = {
-    ["Mode"] = "How the threat value appears on the nameplate: as a second level badge, as a segment inside the health bar, as a thin threat bar above or below it, or as a freely placed element. You can also just drag the element in the preview.",
     ["Make room (move nameplate elements aside)"] = "Moves the nameplate's name, raid icon, elite dragon, crowd-control icons or health text aside so nothing overlaps the element. Blizzard nameplates only.",
     ["Color the number"] = "The threat number takes the threat color (green at 0 %, red at 100 %).",
-    ["Color the background"] = "The badge or segment background takes the threat color. With a colored number as well, the background uses a darker shade so the number stays readable.",
+    ["Color the background"] = "The badge background takes the threat color. With a colored number as well, the background uses a darker shade so the number stays readable.",
     ["Color the nameplate bar"] = "Tints the enemy's health bar itself with the threat color. Blizzard nameplates only.",
     ["Number on the strip"] = "Strip mode only: shows the threat number next to the right end of the thin threat bar. Off = the bar alone.",
     ["Role"] = "Decides the color direction. Automatic detects tanks by stance, form or aura, then by group role or specialization. As a tank, holding the enemy is green; otherwise it is red.",
-    ["Size"] = "Free placement only: scales it from half to double size.",
-    ["Reset position"] = "Free placement only: back to the bar's top-left corner at normal size.",
+    ["Size"] = "Only for a freely dragged badge: scales it from half to double size.",
+    ["Reset position"] = "Only for a freely dragged badge: back to the bar's top-left corner at normal size.",
     ["Enable TrisThreat"] = "Turns TrisThreat on or off.",
     ["Only in instances"] = "Show the element only in dungeons, raids and other instances.",
     ["Hide on trivial mobs"] = "No element on trivial or minor enemies.",
@@ -282,10 +281,10 @@ local function buildMock(parent, y)
     mock.caption:Hide()
     mock.zones = {}
     for i, z in ipairs(ns.MOCK_ZONES) do
-        local f = CreateFrame("Frame", nil, panel)
+        -- A thin outline with a faint fill: the spot stays readable without hiding the nameplate behind it.
+        local f = CreateFrame("Frame", nil, panel, "BackdropTemplate")
         f:SetFrameLevel(panel:GetFrameLevel() + 20)
-        f.tex = f:CreateTexture(nil, "OVERLAY")
-        f.tex:SetAllPoints()
+        f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
         f.zone = z
         f:Hide()
         mock.zones[i] = f
@@ -293,7 +292,13 @@ local function buildMock(parent, y)
 
     local function paintZones(active)
         for _, f in ipairs(mock.zones) do
-            if f == active then f.tex:SetColorTexture(1, 0.82, 0.2, 0.6) else f.tex:SetColorTexture(0.35, 0.8, 0.45, 0.3) end
+            if f == active then
+                f:SetBackdropColor(1, 0.82, 0.2, 0.28)
+                f:SetBackdropBorderColor(1, 0.82, 0.2, 1)
+            else
+                f:SetBackdropColor(0.6, 0.85, 1, 0.06)
+                f:SetBackdropBorderColor(0.6, 0.85, 1, 0.55)
+            end
         end
     end
     local function showZones()
@@ -332,7 +337,7 @@ local function buildMock(parent, y)
                 mock.caption:SetText(L[active.zone.text] or active.zone.text)
             else
                 nx, ny = ns.MockFreeOffsets(px, py, db.scale)
-                mock.caption:SetText(L["Free placement"])
+                mock.caption:SetText(L["Free position"])
             end
             mock.caption:Show()
             if mode ~= db.mode or side ~= db.side or nx ~= db.offsetX or ny ~= db.offsetY then
@@ -451,16 +456,10 @@ local function build()
     -- Left column: display, colors, role and value
     local yl = -236
     heading(frame, "Display", COL1, yl); yl = yl - 28
-    dropdown(frame, "Mode", COL1, yl, "mode", {
-        { value = "badge", text = "Badge (like the level badge)" },
-        { value = "segment", text = "Segment in the health bar" },
-        { value = "strip", text = "Strip above or below the bar" },
-        { value = "floating", text = "Free placement" },
-    }); yl = yl - 34
-    local drag = label(frame, "Drag the element in the preview: drop it on an outlined spot to snap it there, anywhere else to place it freely.", "GameFontNormalSmall")
+    local drag = label(frame, "Drag the element in the preview. Outlined spots snap it to a badge position or turn it into the strip above or below the bar; anywhere else places it freely.", "GameFontNormalSmall")
     drag:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 2, yl + 4)
     drag:SetWidth(COLW)
-    drag:SetJustifyH("LEFT"); yl = yl - 40
+    drag:SetJustifyH("LEFT"); yl = yl - 56
     checkbox(frame, "Make room (move nameplate elements aside)", COL1, yl, "makeRoom"); yl = yl - 34
 
     heading(frame, "Colors", COL1, yl); yl = yl - 24
@@ -491,7 +490,7 @@ local function build()
     yr = yr - 18
     yr = yr - 22
 
-    heading(frame, "Free placement", COL2, yr); yr = yr - 26
+    heading(frame, "Free position", COL2, yr); yr = yr - 26
     floatingOnly[#floatingOnly + 1] = slider(frame, "Size", COL2, yr, "scale", 0.5, 2, 0.1); yr = yr - 44
     local reset = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     reset:SetSize(140, 22)

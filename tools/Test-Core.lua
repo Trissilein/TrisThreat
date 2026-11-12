@@ -86,9 +86,7 @@ check("badge left pushes raid icon left", bl.points[1][1] == "RIGHT" and bl.room
 check("badge top pushes the name up", ns.Layout("badge", "top", m, db2).room.nameY == 27)
 check("badge bottom lifts the health bar above the cast bar", ns.Layout("badge", "bottom", m, db2).room.nameY == 0
     and ns.Layout("badge", "bottom", m, db2).room.barY == 32)
-local seg = ns.Layout("segment", "top", m, db2)
-check("segment coerces top to left, no room", seg.look == "segment" and seg.points[1][1] == "LEFT" and seg.points[1][4] == 2 and seg.h == 17 and seg.room.healthTextX == 0)
-check("segment right shifts the health text", ns.Layout("segment", "right", m, db2).room.healthTextX == -42)
+check("the dropped segment mode becomes the badge", ns.NormalizeDB({ mode = "segment", side = "left" }).mode == "badge")
 local st = ns.Layout("strip", "left", m, db2)
 check("strip coerces to top, full bar width, pushes name", st.look == "strip" and #st.points == 2 and st.w == 190
     and st.h == 7 and st.room.nameY == 12)
@@ -104,7 +102,7 @@ for i, z in ipairs(ns.MOCK_ZONES) do
     zoneRects[i] = { l, b, r, t }
     inside = inside and l >= 0 and b >= 0 and r <= ns.MOCK_W and t <= ns.MOCK_H and r > l and t > b
 end
-check("every snap spot lies inside the preview", inside and #zoneRects == 8)
+check("every snap spot lies inside the preview", inside and #zoneRects == 6)
 local function spot(mode, side) for i, z in ipairs(ns.MOCK_ZONES) do if z.mode == mode and z.side == side then return i end end end
 local function centerOf(i) local r = zoneRects[i]; return (r[1] + r[3]) / 2, (r[2] + r[4]) / 2 end
 local ok = true

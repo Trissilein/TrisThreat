@@ -2,7 +2,6 @@ local _, ns = ...
 
 -- The threat element in Blizzard's own nameplate art (Forever / Retail atlases, see Blizzard_NamePlates):
 --   badge    = a second level badge ("ui-hud-nameplates-levelindicator": dark box, gold rim)
---   segment  = a section inside the health bar's end
 --   strip    = a thin bar with the nameplate bar's frame and fill atlases
 --   floating = the badge, freely positioned
 
@@ -94,22 +93,6 @@ local function configure(el, look, side)
         if hasAtlas(ATLAS_BAR_FILL) then el.fill:GetStatusBarTexture():SetAtlas(ATLAS_BAR_FILL, false) end
         setFont(el.text, "SystemFont_NamePlate_Outlined", 9)
         el.text:SetPoint("LEFT", el, "RIGHT", 8, 0)
-    elseif look == "segment" then
-        el.bg:SetTexture(WHITE)
-        el.bg:SetVertexColor(0.03, 0.03, 0.04, 0.88)
-        el.bg:SetAllPoints()
-        el.fill:SetAllPoints()
-        el.fill:SetStatusBarTexture(WHITE)
-        el.divider:SetWidth(1)
-        local edge = side == "right" and "LEFT" or "RIGHT"
-        el.divider:SetPoint("TOP" .. edge, el, "TOP" .. edge, 0, 0)
-        el.divider:SetPoint("BOTTOM" .. edge, el, "BOTTOM" .. edge, 0, 0)
-        el.divider:Show()
-        setFont(el.text, "SystemFont_NamePlate_Outlined", 9)
-        el.text:SetPoint("LEFT", el, "LEFT", 2, 0)
-        el.text:SetPoint("RIGHT", el, "RIGHT", -2, 0)
-        el.text:SetJustifyH("CENTER")
-        el.text:SetWordWrap(false)
     else -- badge / floating
         ns.SetArt(el.bg, ATLAS_BADGE, FALLBACK_BADGE)
         el.bg:SetAllPoints()
@@ -148,7 +131,7 @@ function ns.PlaceElement(el, parts, spec)
     configure(el, spec.look, ns.EffectiveSide(TrisThreatDB.mode, TrisThreatDB.side))
     -- Text height follows the element like Blizzard's level text (10 on a 23 px badge), not the font object's
     -- size, which the nameplate size setting changes in the world but not in the options preview.
-    local textHeight = spec.look == "strip" and 10 or spec.look == "segment" and spec.h * 0.6 or spec.h * 0.4
+    local textHeight = spec.look == "strip" and 10 or spec.h * 0.4
     pcall(el.text.SetTextHeight, el.text, math.max(7, math.floor(textHeight + 0.5)))
 end
 

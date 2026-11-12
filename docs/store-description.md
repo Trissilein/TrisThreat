@@ -4,7 +4,7 @@ TrisThreat shows how much threat you hold on every enemy that fights you, right 
 
 ### Features
 
-- Four display modes in Blizzard's own nameplate art: a second level badge (left, right, top or bottom), a segment inside the health bar, a thin strip above or below the bar, or a freely placed element
+- Blizzard's own nameplate art: a second level badge (left, right, top or bottom, or dragged anywhere) or a thin strip above or below the bar; drag the element in the settings preview to place it
 - Color from green at 0 % over yellow to red at 100 %, one step per percent; for tanks mirrored, following your lead over the next player
 - Automatic role detection (tank, healer, damage) with a manual override; the tooltip shows which rule decided
 - Blue instead of red when another tank or your pet holds the enemy
