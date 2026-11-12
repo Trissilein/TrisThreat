@@ -98,11 +98,11 @@ check("floating uses offsets and scale", fl.scale == 2 and fl.points[1][4] == 10
 -- Settings preview: snap spots and free placement
 local zoneRects, inside = {}, true
 for i, z in ipairs(ns.MOCK_ZONES) do
-    local l, b, r, t = ns.MockZoneRect(z.mode, z.side)
+    local l, b, r, t = ns.MockZoneRect(z)
     zoneRects[i] = { l, b, r, t }
     inside = inside and l >= 0 and b >= 0 and r <= ns.MOCK_W and t <= ns.MOCK_H and r > l and t > b
 end
-check("every snap spot lies inside the preview", inside and #zoneRects == 6)
+check("every snap spot lies inside the preview", inside and #zoneRects == 8)
 local function spot(mode, side) for i, z in ipairs(ns.MOCK_ZONES) do if z.mode == mode and z.side == side then return i end end end
 local function centerOf(i) local r = zoneRects[i]; return (r[1] + r[3]) / 2, (r[2] + r[4]) / 2 end
 local ok = true

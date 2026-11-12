@@ -44,6 +44,8 @@ L["Green at 0 % threat, red at 100 %. As a tank holding the enemy, it follows yo
 L["Display"] = "Darstellung"
 L["Drag the element in the preview. Dots mark where it snaps: to a badge position, or into the strip above or below the bar. Anywhere else places it freely."] ="Ziehe das Element in der Vorschau. Punkte markieren, wo es einrastet: als Badge oder als Streifen über oder unter der Leiste. Überall sonst steht es frei."
 L["Free position"] = "Freie Position"
+L["Bar left end"] = "Leiste, linkes Ende"
+L["Bar right end"] = "Leiste, rechtes Ende"
 L["Badge right"] = "Badge rechts"
 L["Badge left"] = "Badge links"
 L["Badge above"] = "Badge oben"

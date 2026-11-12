@@ -377,6 +377,9 @@ ns.MOCK_ZONES = {
     { mode = "badge", side = "right", text = "Badge right" }, { mode = "badge", side = "left", text = "Badge left" },
     { mode = "badge", side = "top", text = "Badge above" }, { mode = "badge", side = "bottom", text = "Badge below" },
     { mode = "strip", side = "top", text = "Strip above" }, { mode = "strip", side = "bottom", text = "Strip below" },
+    -- Inside the bar's ends: the badge at 80 % size is exactly as high as the bar (a free position with fixed values).
+    { mode = "floating", offsetX = 2, offsetY = -23, scale = 0.8, text = "Bar left end" },
+    { mode = "floating", offsetX = 148, offsetY = -23, scale = 0.8, text = "Bar right end" },
 } -- dropping the badge on a strip spot turns it into the strip; there is no mode switch
 local MOCK_MEASURE = { barW = 190, barH = 20, levelShown = true, levelRight = true, levelW = 28, levelH = 25 }
 
@@ -394,11 +397,16 @@ local function rectPoint(r, point)
     return x, y
 end
 
--- left, bottom, right, top of the spot where ns.Layout would put the element.
-function ns.MockZoneRect(mode, side)
+-- left, bottom, right, top of the spot where ns.Layout would put the element (zone = an ns.MOCK_ZONES entry).
+function ns.MockZoneRect(zone)
     local bar, level = mockRects()
     local rects = { bar = bar, level = level }
-    local spec = ns.Layout(mode, side, MOCK_MEASURE, nil)
+    if zone.offsetX then
+        local spec = ns.Layout("floating", "right", MOCK_MEASURE, zone)
+        local l, b = bar.l + zone.offsetX, bar.t + zone.offsetY + 3
+        return l, b, l + spec.w * zone.scale, b + spec.h * zone.scale
+    end
+    local spec = ns.Layout(zone.mode, zone.side, MOCK_MEASURE, nil)
     local p = spec.points[1]
     local ax, ay = rectPoint(rects[p[2]], p[3])
     ax, ay = ax + p[4], ay + p[5]

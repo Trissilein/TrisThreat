@@ -330,7 +330,7 @@ local function buildMock(parent, y)
         local fresh = not mock.zonesShown
         mock.zonesShown = true
         for _, f in ipairs(mock.zones) do
-            local l, b, r, t = ns.MockZoneRect(f.zone.mode, f.zone.side)
+            local l, b, r, t = ns.MockZoneRect(f.zone)
             f.rect = { l, b, r, t }
             f:ClearAllPoints()
             f:SetPoint("CENTER", panel, "BOTTOMLEFT", (l + r) / 2, (b + t) / 2)
@@ -366,17 +366,19 @@ local function buildMock(parent, y)
             local index = ns.PickMockZone(px, py, rects)
             local active = index and mock.zones[index]
             paintZones(active)
-            local mode, side, nx, ny = "floating", db.side, db.offsetX, db.offsetY
+            local mode, side, nx, ny, scale = "floating", db.side, db.offsetX, db.offsetY, db.scale
             if active then
-                mode, side = active.zone.mode, active.zone.side
-                mock.caption:SetText(L[active.zone.text] or active.zone.text)
+                local z = active.zone
+                mode, side = z.mode, z.side or db.side
+                if z.offsetX then nx, ny, scale = z.offsetX, z.offsetY, z.scale end
+                mock.caption:SetText(L[z.text] or z.text)
             else
                 nx, ny = ns.MockFreeOffsets(px, py, db.scale)
                 mock.caption:SetText(L["Free position"])
             end
             mock.caption:Show()
-            if mode ~= db.mode or side ~= db.side or nx ~= db.offsetX or ny ~= db.offsetY then
-                db.mode, db.side, db.offsetX, db.offsetY = mode, side, nx, ny
+            if mode ~= db.mode or side ~= db.side or nx ~= db.offsetX or ny ~= db.offsetY or scale ~= db.scale then
+                db.mode, db.side, db.offsetX, db.offsetY, db.scale = mode, side, nx, ny, scale
                 ns.ApplyLayout()
                 ns.RefreshMock()
             end
