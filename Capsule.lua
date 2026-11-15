@@ -5,7 +5,7 @@ local active = {}   -- unit token -> element
 local pool = {}
 local tints = {}    -- unit token -> color while the Blizzard health bar is tinted by threat
 local safeGlows, safePool = {}, {}
-local selectedSafeUnit, pendingSafeUnit, pendingSafeSince
+local safeSince = {} -- unit token -> GetTime() since it became a safe pick
 local preview       -- element shown on the target while the options window is open
 
 ----------------------------------------------------------------------------------------------------
@@ -204,23 +204,20 @@ local function holds(tankUnit, unit)
     return status ~= nil and not issecretvalue(status) and status == 3
 end
 
--- Only recommend a target when the current holder has a clear lead over the next threat holder.
-local function safeLead(holder, unit)
-    if type(UnitThreatPercentageOfLead) == "function" then
-        local ok, lead = pcall(UnitThreatPercentageOfLead, holder, unit)
-        if ok and type(lead) == "number" and not issecretvalue(lead) then
-            if lead <= 0 then return true, math.huge, "numeric" end
-            if lead >= 150 then return true, lead, "numeric" end
-            return false
-        end
-    end
-    if type(UnitThreatLeadSituation) == "function" then
-        local ok, leadStatus = pcall(UnitThreatLeadSituation, holder, unit)
-        if ok and type(leadStatus) == "number" and not issecretvalue(leadStatus) and leadStatus == 0 then
-            return true, -1, "category"
-        end
-    end
-    return false
+-- A readable number from a threat API, or nil (missing, error, secret).
+local function readNumber(fn, ...)
+    if type(fn) ~= "function" then return nil end
+    local ok, value = pcall(fn, ...)
+    if ok and type(value) == "number" and not issecretvalue(value) then return value end
+    return nil
+end
+
+-- Your raw threat in % of the holder's (4th return of UnitDetailedThreatSituation), nil when secret.
+local function rawShare(unit)
+    if type(UnitDetailedThreatSituation) ~= "function" then return nil end
+    local ok, _, _, _, raw = pcall(UnitDetailedThreatSituation, "player", unit)
+    if ok and type(raw) == "number" and not issecretvalue(raw) then return raw end
+    return nil
 end
 
 local function isMainTank(holder)
@@ -446,7 +443,7 @@ local function plateUnit(plate)
 end
 
 ----------------------------------------------------------------------------------------------------
--- Safe target: one green halo where the holder has a clear lead and you are not on the threat list
+-- Safe target: a green halo on every enemy a tank (or pet) targets and leads clearly while your threat is low
 ----------------------------------------------------------------------------------------------------
 
 -- Safe-target halos are pooled separately from the threat meter.
@@ -481,19 +478,6 @@ local function setSafe(unit, plate, on)
     if needsFade then ns.FadeBroadGlow(g, g:GetAlpha(), 1, 0.15) end
 end
 
-local function holderOrder(holder)
-    if holder == "pet" then return math.huge end
-    local prefix, count
-    if IsInRaid and IsInRaid() then prefix, count = "raid", GetNumGroupMembers()
-    elseif IsInGroup and IsInGroup() then prefix, count = "party", GetNumSubgroupMembers()
-    else return math.huge end
-    for index = 1, count do
-        local ok, same = pcall(UnitIsUnit, holder, prefix .. index)
-        if ok and same ~= nil and not issecretvalue(same) and same then return index end
-    end
-    return math.huge
-end
-
 -- Settings "Test" button: shows the safe halo on the current target for a moment, whatever its real threat.
 local testUnit
 function ns.TestSafeGlow()
@@ -522,42 +506,31 @@ function ns.RefreshSafe()
                     and ns.ShouldShow(db, safeClassification(unit), IsInInstance and IsInInstance() or false,
                         IsInGroup and IsInGroup() or false) then
                     local status = readStatus(unit)
-                    if status ~= false and ns.IsSafeStatus(status) then
-                        local holder = holderOf(unit)
-                        local isSafe, leadScore
-                        if holder then isSafe, leadScore = safeLead(holder, unit) end
-                        if holder and isSafe then
-                            candidates[unit] = {
-                                targeted = targetedBy(holder, unit),
-                                holder = holder,
-                                mainTank = isMainTank(holder),
-                                holderOrder = holderOrder(holder),
-                                leadScore = leadScore,
-                            }
-                        end
+                    local holder = ns.IsSafeStatus(status) and holderOf(unit)
+                    if holder then
+                        local safe, leadScore = ns.IsSafeTarget({
+                            status = status,
+                            share = status ~= nil and rawShare(unit) or nil,
+                            lead = readNumber(UnitThreatPercentageOfLead, holder, unit),
+                            leadCategory = readNumber(UnitThreatLeadSituation, holder, unit),
+                            targeted = targetedBy(holder, unit),
+                        })
+                        if safe then candidates[unit] = { holder = holder, leadScore = leadScore } end
                     end
                 end
             end
         end
     end
-    local picks = ns.PickSafe(candidates)
-    local candidate = next(picks)
-    if testUnit and plates[testUnit] then
-        candidate, selectedSafeUnit = testUnit, testUnit
-        pendingSafeUnit, pendingSafeSince = nil, nil
-    elseif not candidate then
-        selectedSafeUnit, pendingSafeUnit, pendingSafeSince = nil, nil, nil
-    else
-        if selectedSafeUnit and not candidates[selectedSafeUnit] then selectedSafeUnit = nil end
-        if candidate == selectedSafeUnit then
-            pendingSafeUnit, pendingSafeSince = nil, nil
-        elseif candidate ~= pendingSafeUnit then
-            pendingSafeUnit, pendingSafeSince = candidate, GetTime()
-        elseif GetTime() - pendingSafeSince >= 0.3 then
-            selectedSafeUnit, pendingSafeUnit, pendingSafeSince = candidate, nil, nil
-        end
+    local picks, now = ns.PickSafe(candidates), GetTime()
+    -- A new pick must hold for 0.3 s before it glows (no flicker); losing it is immediate.
+    for unit in pairs(safeSince) do
+        if not picks[unit] then safeSince[unit] = nil end
     end
-    for unit, plate in pairs(plates) do setSafe(unit, plate, unit == selectedSafeUnit) end
+    for unit in pairs(picks) do safeSince[unit] = safeSince[unit] or now end
+    for unit, plate in pairs(plates) do
+        local on = unit == testUnit or (safeSince[unit] ~= nil and now - safeSince[unit] >= 0.3)
+        setSafe(unit, plate, on)
+    end
     for unit in pairs(safeGlows) do
         if not plates[unit] then setSafe(unit, nil, false) end
     end

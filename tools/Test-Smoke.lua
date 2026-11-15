@@ -104,6 +104,10 @@ plate.UnitFrame = uf
 plate.namePlateUnitToken = "nameplate1"
 _G.C_NamePlate = { GetNamePlateForUnit = function() return plate end, GetNamePlates = function() return { plate } end }
 
+-- Secret-value stand-in: the API returns it, the addon must treat it as unreadable.
+local SECRET = setmetatable({}, { __tostring = function() return "<secret>" end })
+_G.issecretvalue = function(value) return value == SECRET end
+
 for _, chunk in ipairs(MODULES) do chunk("TrisThreat", ns) end
 TrisThreatDB = ns.NormalizeDB({})
 
@@ -372,23 +376,89 @@ TrisThreatDB.role = "auto"
 do
     local real = { IsInGroup = _G.IsInGroup, GetNum = _G.GetNumSubgroupMembers, Roles = _G.UnitGroupRolesAssigned,
         IsUnit = _G.UnitIsUnit, Exists = _G.UnitExists, Threat = _G.UnitThreatSituation,
-        Lead = _G.UnitThreatPercentageOfLead }
+        Lead = _G.UnitThreatPercentageOfLead, Detailed = _G.UnitDetailedThreatSituation,
+        LeadSit = _G.UnitThreatLeadSituation, Plates = C_NamePlate.GetNamePlates }
     _G.IsInGroup = function() return true end
     _G.GetNumSubgroupMembers = function() return 1 end
     _G.UnitGroupRolesAssigned = function() return "TANK" end
     _G.UnitExists = function() return true end
-    _G.UnitIsUnit = function(a, b) return a == b end
-    _G.UnitThreatPercentageOfLead = function() return 160 end
+    local tankTarget = { party1 = "nameplate1" }
+    _G.UnitIsUnit = function(a, b)
+        local holder = a:match("^(.-)target$")
+        if holder then
+            local t = tankTarget[holder]
+            if t == SECRET then return SECRET end
+            return t == b
+        end
+        return a == b
+    end
+    local lead, leadSit, share = 160, nil, 20
+    _G.UnitThreatPercentageOfLead = function() return lead end
+    _G.UnitThreatLeadSituation = function() return leadSit end
+    _G.UnitDetailedThreatSituation = function() return false, 0, share, share, 1000 end
     local playerStatus = 0
     _G.UnitThreatSituation = function(unit) if unit == "player" then return playerStatus end return 3 end
     TrisThreatDB.role, TrisThreatDB.safeGlow, TrisThreatDB.enabled = "damage", true, true
-    ns.RefreshSafe()
-    clock = clock + 0.31
-    ns.RefreshSafe()
-    check("tank holds it, you are not on it: safe glow on", ns.safeGlows.nameplate1 ~= nil)
+    local function settle() ns.RefreshSafe(); clock = clock + 0.31; ns.RefreshSafe() end
+    settle()
+    check("tank targets it, clear lead, your threat low: safe glow on", ns.safeGlows.nameplate1 ~= nil)
     playerStatus = 2
     ns.RefreshSafe()
     check("you pulled it: safe glow off", ns.safeGlows.nameplate1 == nil)
+    playerStatus = 0
+    settle()
+    tankTarget.party1 = "nameplate9"
+    settle()
+    check("tank targets another enemy: no glow (C)", ns.safeGlows.nameplate1 == nil)
+    tankTarget.party1 = SECRET
+    settle()
+    check("tank target unreadable: no glow", ns.safeGlows.nameplate1 == nil)
+    tankTarget.party1 = "nameplate1"
+    lead, leadSit, share = SECRET, 0, 85
+    settle()
+    check("status 0 but your raw share 85 %: no glow (B)", ns.safeGlows.nameplate1 == nil)
+    share = SECRET
+    settle()
+    check("share secret, lead category 0: status and category decide, glow on", ns.safeGlows.nameplate1 ~= nil)
+    leadSit = SECRET
+    settle()
+    check("lead number and category secret: no glow (A unknown)", ns.safeGlows.nameplate1 == nil)
+    lead, leadSit = 140, nil
+    settle()
+    check("status 0 with lead 140 (near aggro): no glow", ns.safeGlows.nameplate1 == nil)
+    lead, share = 160, 20
+    -- Two tanks, each on its own enemy: both glow.
+    local plate2 = Stub()
+    plate2.UnitFrame, plate2.namePlateUnitToken = uf, "nameplate2"
+    C_NamePlate.GetNamePlates = function() return { plate, plate2 } end
+    _G.GetNumSubgroupMembers = function() return 2 end
+    _G.UnitThreatSituation = function(unit, mob)
+        if unit == "player" then return playerStatus end
+        if (unit == "party1" and mob == "nameplate1") or (unit == "party2" and mob == "nameplate2") then return 3 end
+        return 0
+    end
+    tankTarget.party2 = "nameplate2"
+    settle()
+    check("two tanks on two enemies: both glow", ns.safeGlows.nameplate1 ~= nil and ns.safeGlows.nameplate2 ~= nil)
+    tankTarget.party2 = "nameplate1"
+    settle()
+    check("second tank looks elsewhere: only the first tank's enemy glows",
+        ns.safeGlows.nameplate1 ~= nil and ns.safeGlows.nameplate2 == nil)
+    C_NamePlate.GetNamePlates = real.Plates
+    _G.GetNumSubgroupMembers = function() return 1 end
+    _G.UnitThreatSituation = function(unit) if unit == "player" then return playerStatus end return 3 end
+    ns.RefreshSafe()
+    check("plate gone: its glow is removed", ns.safeGlows.nameplate2 == nil)
+    -- Settings Test button: glows on the target whatever its threat, then goes away.
+    playerStatus = 2
+    ns.RefreshSafe()
+    local realAfter, later = C_Timer.After, nil
+    C_Timer.After = function(_, fn) later = fn end
+    ns.TestSafeGlow()
+    check("test button glows on an unsafe target immediately", ns.safeGlows.nameplate1 ~= nil and later ~= nil)
+    later()
+    C_Timer.After = realAfter
+    check("test button glow ends with the timer", ns.safeGlows.nameplate1 == nil)
     playerStatus = 0
     TrisThreatDB.role = "tank"
     ns.RefreshSafe()
@@ -400,6 +470,7 @@ do
     _G.IsInGroup, _G.GetNumSubgroupMembers, _G.UnitGroupRolesAssigned = real.IsInGroup, real.GetNum, real.Roles
     _G.UnitIsUnit, _G.UnitExists, _G.UnitThreatSituation = real.IsUnit, real.Exists, real.Threat
     _G.UnitThreatPercentageOfLead = real.Lead
+    _G.UnitDetailedThreatSituation, _G.UnitThreatLeadSituation = real.Detailed, real.LeadSit
     TrisThreatDB.role = "auto"
 end
 

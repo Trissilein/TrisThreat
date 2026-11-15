@@ -21,17 +21,48 @@ check("offset limit is 400 in every direction", ns.ClampOffset(401) == 400 and n
 check("safe status: not on the list or 0", ns.IsSafeStatus(nil) and ns.IsSafeStatus(0))
 check("unsafe status: 1..3 and unreadable", not ns.IsSafeStatus(1) and not ns.IsSafeStatus(2)
     and not ns.IsSafeStatus(3) and not ns.IsSafeStatus(false))
+-- Safe = A (holder leads clearly) and B (your threat is low) and C (holder targets this enemy). Full matrix;
+-- "secret" = the API value was not readable, so the field is nil.
+local SECRET = nil
+local function info(a, b, c, variant)
+    local t = { targeted = c, status = 0, share = 20, lead = 200 }
+    if not a then t.lead = 120 end                 -- readable lead below 150
+    if not b then t.share = 85 end                 -- readable share at/above 60 %
+    if variant == "secret" then t.lead, t.leadCategory = SECRET, a and 0 or 2; t.share = SECRET end
+    if variant == "secret" and not b then t.status = 1 end -- secret share: only the status can say "not low"
+    return t
+end
+local matrixOK, matrixDetail = true, ""
+for _, variant in ipairs({ "readable", "secret" }) do
+    for _, a in ipairs({ true, false }) do for _, b in ipairs({ true, false }) do for _, c in ipairs({ true, false }) do
+        local got = ns.IsSafeTarget(info(a, b, c, variant)) == true
+        if got ~= (a and b and c) then
+            matrixOK = false
+            matrixDetail = matrixDetail .. string.format(" %s A=%s B=%s C=%s->%s", variant, tostring(a), tostring(b), tostring(c), tostring(got))
+        end
+    end end end
+end
+check("safe matrix: glow only when A, B and C hold (readable and secret values)", matrixOK, matrixDetail)
+check("holder target alone is not enough: high own share", not ns.IsSafeTarget({ targeted = true, status = 0, share = 90, leadCategory = 0 }))
+check("status 0 near aggro (lead 140) gets no glow", not ns.IsSafeTarget({ targeted = true, status = 0, lead = 140 }))
+check("not targeted by the holder: no glow even with a huge lead", not ns.IsSafeTarget({ targeted = false, status = nil, lead = 0 }))
+check("not on the list and holder alone on it: safe", ns.IsSafeTarget({ targeted = true, status = nil, lead = 0 }))
+check("not on the list: a stale share does not matter", ns.IsSafeTarget({ targeted = true, status = nil, share = 99, lead = 300 }))
+check("everything secret: no glow", not ns.IsSafeTarget({ targeted = true, status = 0 })
+    and not ns.IsSafeTarget({ targeted = true, status = false, leadCategory = 0 }))
+check("share threshold is 60 %", ns.IsSafeTarget({ targeted = true, status = 0, share = 59.9, lead = 150 })
+    and not ns.IsSafeTarget({ targeted = true, status = 0, share = 60, lead = 150 }))
+
 local picks = ns.PickSafe({
-    a = { targeted = false, leadScore = 80, mainTank = false, holder = "party1", holderOrder = 1 },
-    b = { targeted = false, leadScore = 150, mainTank = true, holder = "party2", holderOrder = 2 },
+    a = { holder = "party1", leadScore = 200 },
+    b = { holder = "party2", leadScore = -1 },
 })
-check("no holder target known: largest confirmed lead only", picks.b and not picks.a)
+check("two tanks, two targets: both glow", picks.a and picks.b)
 picks = ns.PickSafe({
-    a = { targeted = false, leadScore = math.huge, mainTank = true, holder = "party1", holderOrder = 1 },
-    b = { targeted = true, leadScore = 10, mainTank = false, holder = "party2", holderOrder = 2 },
-    c = { targeted = false, leadScore = 200, mainTank = false, holder = "party3", holderOrder = 3 },
+    a = { holder = "party1", leadScore = 160 },
+    b = { holder = "party1", leadScore = 300 },
 })
-check("holder target wins over larger lead: only that one", picks.b and not picks.a and not picks.c)
+check("one holder, two candidates: only the larger lead", picks.b and not picks.a)
 check("no candidates: nothing", next(ns.PickSafe({})) == nil)
 check("safeGlow defaults on and normalizes", ns.NormalizeDB({}).safeGlow == true
     and ns.NormalizeDB({ safeGlow = false }).safeGlow == false)

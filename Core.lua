@@ -23,7 +23,7 @@ ns.defaults = {
     glowReach = 40,      -- glow size outwards from the bar, in px (10..80)
     glowStrength = 90,   -- glow brightness at the bar, percent (10..100)
     glowFeather = 100,   -- softness: 100 = fades over the whole reach, low = bright almost to a hard edge (5..100)
-    safeGlow = true,     -- green halo on one target with a clear threat lead (non-tanks only)
+    safeGlow = true,     -- green halo on each tank's target while your threat is low (non-tanks only)
     safeGlowColor = { 0.18, 0.85, 0.30 },
     safeTankGUID = nil,  -- optional per-group override for safe-target heuristics
     showInGroup = true,
@@ -295,8 +295,6 @@ function ns.StatusColorKey(status, role, offTank)
     return "good"
 end
 
--- Safe target requires both a clear holder lead and a player threat status of nil or 0.
--- A secret status (false) never qualifies; this is a yes/no recommendation, not a threat ranking.
 -- Glow profile: how much of the glow covers a point k layers out (k = 1..n); 1 at the bar, 0 past the last layer.
 -- feather (5..100 %): the fade starts at (100 - feather) % of the reach and takes the rest; 100 = fades throughout.
 function ns.GlowCoverage(k, n, feather)
@@ -307,31 +305,55 @@ function ns.GlowCoverage(k, n, feather)
     return (1 - s) ^ 1.6
 end
 
+-- Status 0 only means "on the list, below the holder" - that includes just short of pulling it.
 function ns.IsSafeStatus(status)
     return status == nil or status == 0
 end
 
--- candidates = { unit = { targeted = true, mainTank = bool, holderOrder = number, leadScore = number } }.
--- A safe current tank target wins, then the largest confirmed lead, then tank assignment and roster order.
+ns.SAFE_LEAD = 150  -- holder's threat in % of the next one on the list (UnitThreatPercentageOfLead)
+ns.SAFE_SHARE = 60  -- your threat in % of the holder's (UnitDetailedThreatSituation raw percentage)
+
+-- Safe target = A and B and C, all at once; anything unreadable counts as "no".
+-- info = { status = UnitThreatSituation of the player (nil = not on the list, false = secret),
+--          lead = readable lead number or nil, leadCategory = readable UnitThreatLeadSituation of the holder or nil,
+--          share = your readable raw threat % or nil (secret: status and lead decide alone, no number is made up),
+--          targeted = the holder targets exactly this enemy }.
+-- Returns safe, leadScore (larger = clearer lead, for PickSafe).
+function ns.IsSafeTarget(info)
+    -- C: the holder (tank or pet) has this very enemy as its target.
+    if type(info) ~= "table" or info.targeted ~= true then return false end
+    -- B: your own threat is low.
+    if not ns.IsSafeStatus(info.status) then return false end
+    if info.status ~= nil and type(info.share) == "number" and info.share >= ns.SAFE_SHARE then return false end
+    -- A: the holder leads clearly. A readable number decides; otherwise only the lead category 0 qualifies.
+    local lead = info.lead
+    if type(lead) == "number" then
+        if lead <= 0 then return true, math.huge end -- alone on the list
+        if lead >= ns.SAFE_LEAD then return true, lead end
+        return false
+    end
+    if info.leadCategory == 0 then return true, -1 end
+    return false
+end
+
+-- candidates = { unit = { holder = token, leadScore = number } }, each already safe (ns.IsSafeTarget).
+-- Every holder may mark one enemy (several tanks: several glows); a tie for one holder goes to the larger lead.
 function ns.PickSafe(candidates)
-    local bestUnit, bestTarget, bestLead, bestRank, bestOrder
+    local best = {} -- holder -> unit
     for unit, candidate in pairs(candidates) do
         if type(candidate) == "table" then
-            local targeted = candidate.targeted == true
+            local holder = candidate.holder or unit
+            local other = best[holder]
             local lead = tonumber(candidate.leadScore) or -math.huge
-            local rank = candidate.mainTank == true and 0 or candidate.holder == "pet" and 2 or 1
-            local order = tonumber(candidate.holderOrder) or math.huge
-            if bestUnit == nil or (targeted and not bestTarget)
-                or (targeted == bestTarget and lead > bestLead)
-                or (targeted == bestTarget and lead == bestLead and rank < bestRank)
-                or (targeted == bestTarget and lead == bestLead and rank == bestRank and order < bestOrder)
-                or (targeted == bestTarget and lead == bestLead and rank == bestRank and order == bestOrder
-                    and tostring(unit) < tostring(bestUnit)) then
-                bestUnit, bestTarget, bestLead, bestRank, bestOrder = unit, targeted, lead, rank, order
+            local otherLead = other and (tonumber(candidates[other].leadScore) or -math.huge)
+            if not other or lead > otherLead or (lead == otherLead and tostring(unit) < tostring(other)) then
+                best[holder] = unit
             end
         end
     end
-    return bestUnit and { [bestUnit] = true } or {}
+    local picks = {}
+    for _, unit in pairs(best) do picks[unit] = true end
+    return picks
 end
 
 ----------------------------------------------------------------------------------------------------

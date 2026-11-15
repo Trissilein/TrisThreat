@@ -58,7 +58,6 @@ local TIPS = {
     ["Color the background"] = "The badge or segment background takes the threat color. With a colored number as well, the background uses a darker shade so the number stays readable.",
     ["Color the health bar"] = "Colors only the filled part of the health bar. The empty track and the rest of the nameplate stay dark. Blizzard nameplates only.",
     ["Number on the strip"] = "Strip mode only: shows the threat number next to the right end of the thin threat bar. Off = the bar alone.",
-    ["Safe target glow"] = "Highlights one attackable enemy with a confirmed safe threat lead over you. The selected tank's current target takes priority.",
     ["Safe glow color"] = "Choose the color used around the recommended enemy.",
     ["Tank for safe-target recommendations"] = "Automatic uses the assigned or detected tank. Choose a group member to override that choice for this group.",
     ["Role"] = "Decides the color direction. Automatic detects tanks by stance, form or aura, then by group role or specialization. As a tank, holding the enemy is green; otherwise it is red.",
@@ -74,7 +73,7 @@ local TIPS = {
     ["Reach"] = "How far the glow spreads outwards from the health bar.",
     ["Strength"] = "How bright the glow is right at the bar (its opacity).",
     ["Feather"] = "How soft the edge is. 100 % fades smoothly over the whole reach; lower values stay bright longer and then fade faster.",
-    ["Safe target glow"] = "Shows one green recommendation when a group tank (or, if no tank is assigned, another group member or your pet) is targeting an enemy and has a clear threat lead over the next holder. You must not be on that enemy's threat list. Not for tanks.",
+    ["Safe target glow"] = "Green glow on an enemy only while all three hold: a group tank (or, if no tank is assigned, another group member or your pet) holds it with a clear threat lead, is targeting exactly that enemy, and your own threat on it is low. With several tanks, each tank's target can glow. Unreadable threat counts as no. Not for tanks.",
 }
 
 local function addTooltip(widget, text)
