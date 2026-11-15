@@ -691,7 +691,7 @@ local function build()
     safeTankButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     yl = yl - 30
-    -- Reach controls only the outside glow; the four bands never cross the health-bar rectangle.
+    -- Reach controls only the outside glow; the glow ring never crosses the health-bar rectangle.
     for _, s in ipairs({ { "Reach", "glowReach", 10, 80, 2, " px" }, { "Strength", "glowStrength", 10, 100, 5, " %" },
         { "Feather", "glowFeather", 5, 100, 5, " %" } }) do
         compactSlider(frame, s[1], COL1, yl, s[2], s[3], s[4], s[5], s[6], function() ns.FlashGlow(ns.glowKind, true) end)

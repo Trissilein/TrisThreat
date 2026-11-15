@@ -107,6 +107,189 @@ _G.C_NamePlate = { GetNamePlateForUnit = function() return plate end, GetNamePla
 for _, chunk in ipairs(MODULES) do chunk("TrisThreat", ns) end
 TrisThreatDB = ns.NormalizeDB({})
 
+-- Glow geometry, from the anchors the code really sets (y grows downwards here; WoW offsets are y-up).
+-- Regions, the glow frame, the strip element and its artwork record SetPoint/SetSize; rectOf() resolves them.
+do
+    local ATLAS = ns.GLOW_ATLAS
+    check("glow atlas layout is exposed for the geometry checks", ATLAS ~= nil)
+    local BAR = { l = 0, t = 0, r = 190, b = 20 }
+    local rects = {}
+    local function track(frame)
+        frame.pts, frame.size = {}, nil
+        frame.ClearAllPoints = function(self) self.pts = {} end
+        frame.SetPoint = function(self, point, rel, relPoint, x, y) self.pts[point] = { rel, relPoint, x or 0, y or 0 } end
+        frame.SetSize = function(self, w, h) self.size = { w, h } end
+        frame.SetHeight = function(self, h) self.size = { self.size and self.size[1], h } end
+        return frame
+    end
+    local function rectOf(frame)
+        local l, r, t, b
+        local w, h = frame.size and frame.size[1], frame.size and frame.size[2]
+        for point, p in pairs(frame.pts) do
+            local rel = rects[p[1]]
+            if not rel then error("FAIL anchor to an unknown frame") end
+            local x = (p[2]:find("LEFT") and rel.l or p[2]:find("RIGHT") and rel.r or (rel.l + rel.r) / 2) + p[3]
+            local y = (p[2]:find("TOP") and rel.t or p[2]:find("BOTTOM") and rel.b or (rel.t + rel.b) / 2) - p[4]
+            if point:find("LEFT") then l = x elseif point:find("RIGHT") then r = x end
+            if point:find("TOP") then t = y elseif point:find("BOTTOM") then b = y end
+        end
+        if l and not r and w then r = l + w elseif r and not l and w then l = r - w end
+        if t and not b and h then b = t + h elseif b and not t and h then t = b - h end
+        if not (l and r and t and b) then error("FAIL frame is not fully anchored") end
+        return { l = l, t = t, r = r, b = b }
+    end
+    local function hypot(x, y) return math.sqrt(x * x + y * y) end
+    local count = 0
+    local function q(name, condition, detail) -- quiet check: many geometry assertions, one PASS line at the end
+        if not condition then error("FAIL " .. name .. (detail and (" " .. detail) or "")) end
+        count = count + 1
+    end
+    local function overlap(a, b) return a.l < b.r and b.l < a.r and a.t < b.b and b.t < a.b end
+    local function area(a) return (a.r - a.l) * (a.b - a.t) end
+    local function distance(x, y, a) -- distance from a point to a rectangle (0 on or inside it)
+        return hypot(math.max(a.l - x, 0, x - a.r), math.max(a.t - y, 0, y - a.b))
+    end
+
+    local glow = track(ns.CreateBroadGlow({ 0.2, 0.8, 0.3 }))
+    for _, region in ipairs(glow.regions) do
+        track(region)
+        region.SetTexCoord = function(self, ...) self.uv = { ... } end
+        region.SetVertexColor = function(self, ...) self.tint = { ... } end
+    end
+    bar.GetWidth = function() return BAR.r - BAR.l end
+    rects[bar] = BAR
+    local parts = { uf = uf, bar = bar }
+
+    -- Checks the eight regions of `glow` against the rectangle `inner` they must surround.
+    local function checkRing(label, reach, inner)
+        local g = rectOf(glow)
+        rects[glow] = g
+        q(label .. ": glow frame is the inner rectangle plus reach on every side",
+            g.l == inner.l - reach and g.r == inner.r + reach and g.t == inner.t - reach and g.b == inner.b + reach)
+        local sum = 0
+        for _, region in ipairs(glow.regions) do region.rect = rectOf(region) end
+        for i, region in ipairs(glow.regions) do
+            local a = region.rect
+            sum = sum + area(a)
+            q(label .. ": region " .. i .. " has size and lies inside the glow frame",
+                a.l < a.r and a.t < a.b and a.l >= g.l and a.r <= g.r and a.t >= g.t and a.b <= g.b)
+            q(label .. ": region " .. i .. " leaves the bar rectangle free", not overlap(a, inner))
+            for j = i + 1, #glow.regions do
+                q(label .. ": regions " .. i .. " and " .. j .. " do not overlap", not overlap(a, glow.regions[j].rect))
+            end
+        end
+        q(label .. ": the eight regions cover the ring without a gap", sum == area(g) - area(inner))
+        for _, key in ipairs({ "topLeft", "topRight", "bottomLeft", "bottomRight" }) do
+            local a = glow[key].rect
+            q(label .. ": " .. key .. " is a reach-sized square", a.r - a.l == reach and a.b - a.t == reach)
+        end
+        -- UV: the texture's bright side (small tile coordinates) must face the bar, the dark side the outside.
+        local span = ATLAS.tile - 1
+        for _, region in ipairs(glow.regions) do
+            local a, uv = region.rect, region.uv
+            local function tile(corner) -- tile coordinates (0 = bright inner corner, 1 = faded) at a region corner
+                local sx, sy = corner[1] == "l" and 0 or 1, corner[2] == "t" and 0 or 1
+                local u = uv[1] + (uv[2] - uv[1]) * sx
+                local v = uv[3] + (uv[4] - uv[3]) * sy
+                return (u * ATLAS.w - 0.5) % ATLAS.cell - ATLAS.gutter, (v * ATLAS.h - 0.5) % ATLAS.cell - ATLAS.gutter
+            end
+            local corners = {}
+            for _, cx in ipairs({ "l", "r" }) do for _, cy in ipairs({ "t", "b" }) do
+                local tx, ty = tile({ cx, cy })
+                tx, ty = tx / span, ty / span
+                local c = { px = a[cx], py = a[cy], d = hypot(tx, ty), tx = tx, ty = ty }
+                c.near = distance(c.px, c.py, inner)
+                corners[#corners + 1] = c
+                q(label .. ": UV stays inside the feather tile, away from the gutter",
+                    tx > -1e-6 and tx < 1 + 1e-6 and ty > -1e-6 and ty < 1 + 1e-6)
+            end end
+            for _, c1 in ipairs(corners) do for _, c2 in ipairs(corners) do
+                if c1.near < c2.near - 1e-9 then
+                    q(label .. ": brighter texels lie nearer the bar", c1.d < c2.d + 1e-9)
+                elseif math.abs(c1.near - c2.near) < 1e-9 then
+                    q(label .. ": equally distant corners are equally bright", math.abs(c1.d - c2.d) < 1e-6)
+                end
+            end end
+            for _, c in ipairs(corners) do
+                if c.near == 0 then q(label .. ": the texel at the bar edge is the brightest one", c.d < 1e-6) end
+            end
+        end
+    end
+
+    local inner = { l = BAR.l - 2, t = BAR.t - 2, r = BAR.r + 2, b = BAR.b + 2 } -- bar plus GLOW_GAP
+    for _, reach in ipairs({ 10, 40, 80 }) do
+        TrisThreatDB.glowReach = reach
+        ns.PlaceBroadGlow(glow, parts)
+        checkRing("reach " .. reach, reach, inner)
+    end
+    TrisThreatDB.glowReach = 40
+    ns.PlaceBroadGlow(glow, parts)
+
+    -- The anchors follow the bar; a resized bar needs no relayout of the regions.
+    local before = glow.top.pts
+    BAR.r = 260
+    ns.PlaceBroadGlow(glow, parts)
+    check("resized bar: regions were not re-anchored", glow.top.pts == before)
+    inner.r = BAR.r + 2
+    checkRing("resized bar", 40, inner)
+    BAR.r = 190
+    inner.r = BAR.r + 2
+    ns.PlaceBroadGlow(glow, parts)
+
+    -- Feather and Strength
+    local u = glow.topLeft.uv[1]
+    TrisThreatDB.glowFeather, TrisThreatDB.glowStrength = 5, 35
+    ns.PlaceBroadGlow(glow, parts)
+    check("Feather selects a different radial profile", glow.topLeft.uv[1] ~= u)
+    check("Strength controls opacity independently", glow.topLeft.tint[4] == 0.35)
+    check("corner profile meets both straight edges", glow.topLeft.uv[2] == glow.top.uv[1]
+        and glow.topLeft.uv[4] == glow.left.uv[3])
+    checkRing("feather 5", 40, inner)
+    for feather = 5, 100, 5 do
+        TrisThreatDB.glowFeather = feather
+        ns.PlaceBroadGlow(glow, parts)
+        for _, region in ipairs(glow.regions) do
+            local uv = region.uv
+            local col, row = math.floor(uv[1] * ATLAS.w / ATLAS.cell), math.floor(uv[3] * ATLAS.h / ATLAS.cell)
+            q("feather " .. feather .. ": UVs stay in one atlas cell",
+                col == math.floor(uv[2] * ATLAS.w / ATLAS.cell) and row == math.floor(uv[4] * ATLAS.h / ATLAS.cell))
+        end
+    end
+    TrisThreatDB = ns.NormalizeDB({})
+
+    -- Strip mode: the glow wraps the bar and the strip's real artwork (as placed by PlaceElement).
+    for _, side in ipairs({ "top", "bottom" }) do
+        TrisThreatDB.mode, TrisThreatDB.side = "strip", side
+        local el = track(ns.CreateElement())
+        track(el.bg)
+        local spec = ns.Layout("strip", side, ns.Measure(parts), TrisThreatDB)
+        ns.PlaceElement(el, parts, spec)
+        check("strip element is in strip look on " .. side, el.look == "strip")
+        local stripRect = rectOf(el)
+        rects[el] = stripRect
+        local art = rectOf(el.bg)
+        check("strip artwork lies beside the bar on " .. side, art.t < BAR.t or art.b > BAR.b)
+        ns.PlaceBroadGlow(glow, parts, el)
+        local want = {
+            l = math.min(BAR.l, art.l) - 2, r = math.max(BAR.r, art.r) + 2,
+            t = math.min(BAR.t, art.t) - 2, b = math.max(BAR.b, art.b) + 2,
+        }
+        checkRing("strip " .. side, 40, want)
+    end
+    TrisThreatDB = ns.NormalizeDB({})
+    bar.GetWidth = nil
+    realPrint("PASS glow geometry: " .. count .. " ring, UV orientation and gutter checks")
+end
+
+-- Strip number: shadowed, so it stays readable on the glow's bright inner edge.
+do
+    local el = ns.CreateElement()
+    local shadow
+    el.text.SetShadowOffset = function(_, x, y) shadow = { x, y } end
+    ns.PlaceElement(el, { uf = uf, bar = bar }, ns.Layout("strip", "top", ns.Measure({ bar = bar }), TrisThreatDB))
+    check("strip number has a shadow", shadow ~= nil and shadow[1] ~= 0)
+end
+
 ns.ToggleOptions()
 check("options window builds and opens", calls.Show ~= nil)
 

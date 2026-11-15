@@ -60,70 +60,73 @@ function ns.CreateElement()
     return el
 end
 
--- Safe-target glow uses layered bands outside the health-bar rectangle, so its fill and dark track stay readable.
+-- Safe-target glow: a feathered ring (four straight edges, four radial corners) outside the health-bar rectangle,
+-- so its fill and dark track stay readable.
 ns.GLOW_GREEN = { 0.18, 0.85, 0.30 }
 function ns.GetSafeGlowColor()
     return TrisThreatDB and TrisThreatDB.safeGlowColor or ns.GLOW_GREEN
 end
-local GLOW_LAYERS = 24
+local GLOW_TEXTURE = "Interface\\AddOns\\TrisThreat\\Assets\\Glow.tga"
 local GLOW_GAP = 2 -- starts just outside the bar's own border
+-- Glow.tga (tools/Generate-GlowTexture.js): 20 feather tiles of TILE px, each in a CELL with a GUTTER of repeated
+-- edge texels, so filtering and mips never reach a neighbor tile.
+local ATLAS = { w = 512, h = 512, tile = 64, gutter = 8, cell = 80, cols = 6 }
+ns.GLOW_ATLAS = ATLAS
 
--- Light of layer i: a point k layers out is covered by all layers >= k, so a layer adds cover(i) - cover(i + 1).
-local function layerLight(i)
-    local db = TrisThreatDB
-    local peak = (db.glowStrength or 90) / 100
-    local feather = db.glowFeather or 100
-    return ns.GlowCoverage(i, GLOW_LAYERS, feather) * peak
-end
-
--- Applies the strength/feather settings to a glow's layers.
+-- Applies the strength/feather settings to the eight non-overlapping glow regions.
 local function colorGlow(g)
-    for i, layer in ipairs(g.layers) do
-        local c = layerLight(i)
-        for _, region in ipairs({ layer.top, layer.bottom, layer.left, layer.right }) do
-            region:SetVertexColor(g.color[1], g.color[2], g.color[3], c)
-        end
+    local alpha = (TrisThreatDB.glowStrength or 90) / 100
+    local tile = math.max(0, math.min(19, math.floor((TrisThreatDB.glowFeather or 100) / 5 + 0.5) - 1))
+    local u = (tile % ATLAS.cols) * ATLAS.cell + ATLAS.gutter + 0.5
+    local v = math.floor(tile / ATLAS.cols) * ATLAS.cell + ATLAS.gutter + 0.5
+    local span = ATLAS.tile - 1
+    local function coords(region, x1, y1, x2, y2)
+        region:SetTexCoord((u + x1 * span) / ATLAS.w, (u + x2 * span) / ATLAS.w,
+            (v + y1 * span) / ATLAS.h, (v + y2 * span) / ATLAS.h)
+    end
+    -- Edge samples use one axis of the same radial profile as the corners, without stretching the corners.
+    coords(g.top, 0, 1, 0, 0)
+    coords(g.bottom, 0, 0, 0, 1)
+    coords(g.left, 1, 0, 0, 0)
+    coords(g.right, 0, 0, 1, 0)
+    coords(g.topLeft, 1, 1, 0, 0)
+    coords(g.topRight, 0, 1, 1, 0)
+    coords(g.bottomLeft, 1, 0, 0, 1)
+    coords(g.bottomRight, 0, 0, 1, 1)
+    for _, region in ipairs(g.regions) do
+        region:SetVertexColor(g.color[1], g.color[2], g.color[3], alpha)
     end
 end
 
 function ns.CreateBroadGlow(color)
     local f = CreateFrame("Frame", nil, UIParent)
-    f.layers, f.color = {}, color or ns.GetSafeGlowColor()
+    f.regions, f.color = {}, color or ns.GetSafeGlowColor()
     f:SetAlpha(0)
-    for i = 1, GLOW_LAYERS do
-        local function part()
-            local t = f:CreateTexture(nil, "BACKGROUND")
-            t:SetTexture(WHITE)
-            t:SetBlendMode("BLEND")
-            return t
-        end
-        local layer = {}
-        layer.top, layer.bottom, layer.left, layer.right = part(), part(), part(), part()
-        f.layers[i] = layer
+    for _, key in ipairs({ "top", "bottom", "left", "right", "topLeft", "topRight", "bottomLeft", "bottomRight" }) do
+        local t = f:CreateTexture(nil, "BACKGROUND")
+        t:SetTexture(GLOW_TEXTURE)
+        t:SetBlendMode("BLEND")
+        f[key], f.regions[#f.regions + 1] = t, t
     end
     return f
 end
 
--- Each translucent band stays outside the health-bar rectangle, so neither the fill nor its dark track is covered.
-local function layoutGlow(g, w, h)
-    g.layW, g.layH = w, h
-    local reach = TrisThreatDB.glowReach or 40
-    local gap = GLOW_GAP
-    local left, top = reach + gap, reach + gap
-    local right, bottom = left + w, top + h
-    local step = reach / GLOW_LAYERS
-    for i, layer in ipairs(g.layers) do
-        local inner, outer = gap + (i - 1) * step, gap + i * step
-        local function put(region, x1, y1, x2, y2)
-            region:ClearAllPoints()
-            region:SetPoint("TOPLEFT", g, "TOPLEFT", x1, -y1)
-            region:SetPoint("BOTTOMRIGHT", g, "TOPLEFT", x2, -y2)
-        end
-        put(layer.top, left - outer, top - outer, right + outer, top - inner)
-        put(layer.bottom, left - outer, bottom + inner, right + outer, bottom + outer)
-        put(layer.left, left - outer, top, left - inner, bottom)
-        put(layer.right, right + inner, top, right + outer, bottom)
+-- Straight edges and radial corner squares stay outside the outlined rectangle; the center has no texture.
+-- Anchored to g's corners, so they follow g's size without relayout; only a changed reach needs this.
+local function layoutGlow(g, reach)
+    local function put(region, p1, rel1, x1, y1, p2, rel2, x2, y2)
+        region:ClearAllPoints()
+        region:SetPoint(p1, g, rel1, x1, y1)
+        if p2 then region:SetPoint(p2, g, rel2, x2, y2) else region:SetSize(reach, reach) end
     end
+    put(g.topLeft, "TOPLEFT", "TOPLEFT", 0, 0)
+    put(g.topRight, "TOPRIGHT", "TOPRIGHT", 0, 0)
+    put(g.bottomLeft, "BOTTOMLEFT", "BOTTOMLEFT", 0, 0)
+    put(g.bottomRight, "BOTTOMRIGHT", "BOTTOMRIGHT", 0, 0)
+    put(g.top, "TOPLEFT", "TOPLEFT", reach, 0, "BOTTOMRIGHT", "TOPRIGHT", -reach, -reach)
+    put(g.bottom, "TOPLEFT", "BOTTOMLEFT", reach, reach, "BOTTOMRIGHT", "BOTTOMRIGHT", -reach, 0)
+    put(g.left, "TOPLEFT", "TOPLEFT", 0, -reach, "BOTTOMRIGHT", "BOTTOMLEFT", reach, reach)
+    put(g.right, "TOPLEFT", "TOPRIGHT", -reach, -reach, "BOTTOMRIGHT", "BOTTOMRIGHT", 0, reach)
 end
 
 -- el (optional): the threat element. In strip mode it is part of the outline, so the glow wraps bar AND strip
@@ -132,21 +135,25 @@ function ns.PlaceBroadGlow(g, parts, el)
     local parent = parts.uf
     g:SetParent(parent)
     g:SetFrameStrata(parent:GetFrameStrata())
-    -- Keep the additive light behind the health bar so its empty track remains legible.
+    -- Keep the light behind the health bar so its empty track remains legible.
     local barLevel = parts.bar and parts.bar.GetFrameLevel and parts.bar:GetFrameLevel()
     local glowLevel = type(barLevel) == "number" and barLevel - 1 or parent:GetFrameLevel()
     g:SetFrameLevel(math.max(parent:GetFrameLevel(), glowLevel))
     g:ClearAllPoints()
     local reach = TrisThreatDB.glowReach or 40
-    g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -reach - GLOW_GAP, reach + GLOW_GAP)
-    g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", reach + GLOW_GAP, -reach - GLOW_GAP)
-    local m = ns.Measure(parts)
-    local w, h = m.barW, m.barH
     local db = TrisThreatDB
-    local style = (db.glowReach or 40) .. ":" .. (db.glowStrength or 90) .. ":" .. (db.glowFeather or 100)
+    local extraLeft, extraRight, extraTop, extraBottom = 0, 0, 0, 0
+    if el and el.look == "strip" then
+        local spec = ns.Layout("strip", db.side, ns.Measure(parts), db)
+        extraLeft, extraRight = 2, 6 -- strip background artwork extends beyond its frame
+        if ns.EffectiveSide("strip", db.side) == "bottom" then extraBottom = 7 + spec.h + 6
+        else extraTop = 5 + spec.h + 3 end
+    end
+    g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -reach - GLOW_GAP - extraLeft, reach + GLOW_GAP + extraTop)
+    g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", reach + GLOW_GAP + extraRight, -reach - GLOW_GAP - extraBottom)
+    local style = reach .. ":" .. (db.glowStrength or 90) .. ":" .. (db.glowFeather or 100)
         .. ":" .. table.concat(g.color, ":")
-    if g.style ~= style then g.style = style; colorGlow(g); g.layW = nil end -- settings changed: recolor, relayout
-    if g.layW ~= w or g.layH ~= h then layoutGlow(g, w, h) end
+    if g.style ~= style then g.style = style; colorGlow(g); layoutGlow(g, reach) end -- settings changed
 end
 
 -- A pooled or reparented element must not keep a glow anchored across two nameplate trees.
@@ -214,6 +221,8 @@ local function configure(el, look, side)
         el.fill:SetAllPoints()
         if hasAtlas(ATLAS_BAR_FILL) then el.fill:GetStatusBarTexture():SetAtlas(ATLAS_BAR_FILL, false) end
         setFont(el.text, "SystemFont_NamePlate_Outlined", 9)
+        el.text:SetShadowColor(0, 0, 0, 1) -- the number sits on the glow's bright inner edge
+        el.text:SetShadowOffset(1, -1)
         el.text:SetPoint("LEFT", el, "RIGHT", 8, 0)
     elseif look == "segment" then
         el.bg:SetTexture(WHITE)

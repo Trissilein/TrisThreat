@@ -19,6 +19,7 @@ else
 fi
 
 "$python_cmd" tools/Test-LuaSyntax.py
+node tools/Generate-GlowTexture.js --check
 for test in tools/Test-*.js; do
   echo "== $test"
   node "$test"
