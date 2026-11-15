@@ -9,6 +9,9 @@ local calls = {}
 local Stub
 local returns = {
     GetFrameLevel = function() return 1 end,
+    GetAlpha = function(self) return rawget(self, "__alpha") or 1 end,
+    SetAlpha = function(self, alpha) rawset(self, "__alpha", alpha) end,
+    Play = function(self) local finish = rawget(self, "__script_OnFinished"); if finish then finish(self) end end,
     GetWidth = function() return 190 end,
     GetHeight = function() return 20 end,
     GetFrameStrata = function() return "DIALOG" end,
@@ -71,6 +74,8 @@ _G.UIDropDownMenu_AddButton = function() end
 _G.UIDropDownMenu_SetText = function() end
 _G.SlashCmdList = {}
 _G.InCombatLockdown = function() return false end
+local clock = 0
+_G.GetTime = function() return clock end
 _G.UnitHasEffectivelyTankAura = function() return false end
 _G.UnitGroupRolesAssigned = function() return "NONE" end
 _G.UnitThreatSituation = function() return 1 end
@@ -125,27 +130,35 @@ local function dragTo(x, y)
     mock.dragger.__script_OnUpdate()
     mock.element.__script_OnDragStop()
 end
-local l, b, r, t = ns.MockZoneRect({ mode = "badge", side = "bottom" })
-dragTo((l + r) / 2, (b + t) / 2)
+local function dragToZone(mode, side)
+    for _, zone in ipairs(ns.MOCK_ZONES) do
+        if zone.mode == mode and zone.side == side then
+            local l, b, r, t = ns.MockZoneSnapRect(zone)
+            dragTo((l + r) / 2, (b + t) / 2)
+            return
+        end
+    end
+    error("missing snap zone " .. mode .. "/" .. side)
+end
+dragToZone("badge", "bottom")
 check("dropping on the badge-below spot snaps there", TrisThreatDB.mode == "badge" and TrisThreatDB.side == "bottom")
-l, b, r, t = ns.MockZoneRect({ mode = "strip", side = "top" })
-dragTo((l + r) / 2, (b + t) / 2)
+dragToZone("strip", "top")
 check("dropping on the strip spot turns it into the strip", TrisThreatDB.mode == "strip" and TrisThreatDB.side == "top")
-l, b, r, t = ns.MockZoneRect({ mode = "badge", side = "left" })
-dragTo((l + r) / 2, (b + t) / 2)
+dragToZone("badge", "left")
 check("dropping on the badge-left spot snaps there", TrisThreatDB.mode == "badge" and TrisThreatDB.side == "left")
-l, b, r, t = ns.MockZoneRect(ns.MOCK_ZONES[7])
-dragTo((l + r) / 2, (b + t) / 2)
+dragToZone("segment", "left")
 check("dropping inside the bar's left end makes the segment", TrisThreatDB.mode == "segment" and TrisThreatDB.side == "left")
 dragTo(600, 130)
 check("dropping elsewhere places freely, far to the right", TrisThreatDB.mode == "floating" and TrisThreatDB.offsetX > 150)
 TrisThreatDB.mode, TrisThreatDB.side, TrisThreatDB.offsetX, TrisThreatDB.offsetY = "badge", "right", 0, 0
 ns.FlashGlow()
 check("flashing the glow runs and restores the preview", true)
+local safeTestCalled, testSafeGlow = false, ns.TestSafeGlow
+ns.TestSafeGlow = function(...) safeTestCalled = true; return testSafeGlow(...) end
 ns.FlashGlow("safe")
-check("flashing the safe glow runs, tests the target and cleans up", ns.safeGlows.nameplate1 == nil and ns.warnTest == nil)
-ns.TestWarn()
-check("the aggro Test button forces and clears the warning", ns.warnTest == nil)
+ns.TestSafeGlow = testSafeGlow
+local safeGlow = ns.safeGlows.nameplate1
+check("safe-glow test button tests the target and cleans up", safeTestCalled and safeGlow == nil)
 
 -- room bookkeeping: switching back to floating leaves nothing applied
 TrisThreatDB.mode = "badge"; TrisThreatDB.side = "left"
@@ -175,15 +188,19 @@ TrisThreatDB.role = "auto"
 -- Safe target: a TANK party member holds the mob, the player is not on its list -> green halo; off when it is.
 do
     local real = { IsInGroup = _G.IsInGroup, GetNum = _G.GetNumSubgroupMembers, Roles = _G.UnitGroupRolesAssigned,
-        IsUnit = _G.UnitIsUnit, Exists = _G.UnitExists, Threat = _G.UnitThreatSituation }
+        IsUnit = _G.UnitIsUnit, Exists = _G.UnitExists, Threat = _G.UnitThreatSituation,
+        Lead = _G.UnitThreatPercentageOfLead }
     _G.IsInGroup = function() return true end
     _G.GetNumSubgroupMembers = function() return 1 end
     _G.UnitGroupRolesAssigned = function() return "TANK" end
     _G.UnitExists = function() return true end
     _G.UnitIsUnit = function(a, b) return a == b end
+    _G.UnitThreatPercentageOfLead = function() return 160 end
     local playerStatus = 0
     _G.UnitThreatSituation = function(unit) if unit == "player" then return playerStatus end return 3 end
     TrisThreatDB.role, TrisThreatDB.safeGlow, TrisThreatDB.enabled = "damage", true, true
+    ns.RefreshSafe()
+    clock = clock + 0.31
     ns.RefreshSafe()
     check("tank holds it, you are not on it: safe glow on", ns.safeGlows.nameplate1 ~= nil)
     playerStatus = 2
@@ -199,6 +216,7 @@ do
     TrisThreatDB.safeGlow = true
     _G.IsInGroup, _G.GetNumSubgroupMembers, _G.UnitGroupRolesAssigned = real.IsInGroup, real.GetNum, real.Roles
     _G.UnitIsUnit, _G.UnitExists, _G.UnitThreatSituation = real.IsUnit, real.Exists, real.Threat
+    _G.UnitThreatPercentageOfLead = real.Lead
     TrisThreatDB.role = "auto"
 end
 

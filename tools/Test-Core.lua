@@ -17,14 +17,21 @@ check("idempotent and rounded offsets", twice.offsetX == 12)
 check("offset limit is 400 in every direction", ns.ClampOffset(401) == 400 and ns.ClampOffset(-401) == -400
     and ns.ClampOffset("abc") == 0 and ns.ClampOffset(nil) == 0)
 
--- Safe target: status nil/0 only; a holder's target wins when readable
+-- Safe target: status nil/0 only; select one candidate by target, lead, and holder priority.
 check("safe status: not on the list or 0", ns.IsSafeStatus(nil) and ns.IsSafeStatus(0))
 check("unsafe status: 1..3 and unreadable", not ns.IsSafeStatus(1) and not ns.IsSafeStatus(2)
     and not ns.IsSafeStatus(3) and not ns.IsSafeStatus(false))
-local picks = ns.PickSafe({ a = false, b = false })
-check("no holder target known: all candidates", picks.a and picks.b)
-picks = ns.PickSafe({ a = false, b = true, c = false })
-check("holder targets one: only that one", picks.b and not picks.a and not picks.c)
+local picks = ns.PickSafe({
+    a = { targeted = false, leadScore = 80, mainTank = false, holder = "party1", holderOrder = 1 },
+    b = { targeted = false, leadScore = 150, mainTank = true, holder = "party2", holderOrder = 2 },
+})
+check("no holder target known: largest confirmed lead only", picks.b and not picks.a)
+picks = ns.PickSafe({
+    a = { targeted = false, leadScore = math.huge, mainTank = true, holder = "party1", holderOrder = 1 },
+    b = { targeted = true, leadScore = 10, mainTank = false, holder = "party2", holderOrder = 2 },
+    c = { targeted = false, leadScore = 200, mainTank = false, holder = "party3", holderOrder = 3 },
+})
+check("holder target wins over larger lead: only that one", picks.b and not picks.a and not picks.c)
 check("no candidates: nothing", next(ns.PickSafe({})) == nil)
 check("safeGlow defaults on and normalizes", ns.NormalizeDB({}).safeGlow == true
     and ns.NormalizeDB({ safeGlow = false }).safeGlow == false)
@@ -70,8 +77,9 @@ check("shown by default", ns.ShouldShow(d, "normal", false))
 check("trivial hidden", not ns.ShouldShow(d, "trivial", false) and not ns.ShouldShow(d, "minus", false))
 d.hideTrivial = false
 check("trivial shown when allowed", ns.ShouldShow(d, "trivial", false))
-d.onlyInstances = true
-check("instances only", not ns.ShouldShow(d, "normal", false) and ns.ShouldShow(d, "normal", true))
+d.showSolo = false
+check("solo disabled and group remains visible", not ns.ShouldShow(d, "normal", false, false)
+    and ns.ShouldShow(d, "normal", false, true))
 d.enabled = false
 check("disabled hides all", not ns.ShouldShow(d, "normal", true))
 
@@ -120,11 +128,11 @@ check("floating uses offsets and scale", fl.scale == 2 and fl.points[1][4] == 10
 -- Settings preview: snap spots and free placement
 local zoneRects, inside = {}, true
 for i, z in ipairs(ns.MOCK_ZONES) do
-    local l, b, r, t = ns.MockZoneRect(z)
+    local l, b, r, t = ns.MockZoneSnapRect(z)
     zoneRects[i] = { l, b, r, t }
     inside = inside and l >= 0 and b >= 0 and r <= ns.MOCK_W and t <= ns.MOCK_H and r > l and t > b
 end
-check("every snap spot lies inside the preview", inside and #zoneRects == 8)
+check("every snap spot lies inside the preview", inside and #zoneRects == 10)
 local function spot(mode, side) for i, z in ipairs(ns.MOCK_ZONES) do if z.mode == mode and z.side == side then return i end end end
 local function centerOf(i) local r = zoneRects[i]; return (r[1] + r[3]) / 2, (r[2] + r[4]) / 2 end
 local ok = true
