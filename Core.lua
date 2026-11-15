@@ -19,13 +19,15 @@ ns.defaults = {
     colorText = true,    -- threat color on the number
     colorBackground = false, -- threat color on the badge/segment background (the strip fill is always colored)
     stripText = true,    -- strip mode shows the number at its right end
-    glow = true,         -- pulsing red halo: tank lost aggro, or anybody else pulled it
     colorBar = false,    -- also tint the nameplate health bar
     glowReach = 40,      -- glow size outwards from the bar, in px (10..80)
     glowStrength = 90,   -- glow brightness at the bar, percent (10..100)
     glowFeather = 100,   -- softness: 100 = fades over the whole reach, low = bright almost to a hard edge (5..100)
-    safeGlow = true,     -- green halo on the enemy a tank holds and you are not on (non-tanks only)
-    onlyInstances = false,
+    safeGlow = true,     -- green halo on one target with a clear threat lead (non-tanks only)
+    safeGlowColor = { 0.18, 0.85, 0.30 },
+    safeTankGUID = nil,  -- optional per-group override for safe-target heuristics
+    showInGroup = true,
+    showSolo = true,
     hideTrivial = true,
     minimap = { hide = false },
 }
@@ -55,14 +57,25 @@ function ns.NormalizeDB(db)
     db.scale = clamp(db.scale, 0.5, 2, 1)
     db.mode = DISPLAY_MODES[db.mode] and db.mode or d.mode
     db.side = SIDES[db.side] and db.side or d.side
-    for _, key in ipairs({ "makeRoom", "colorText", "colorBackground", "stripText", "glow", "safeGlow", "colorBar", "hideTrivial" }) do
+    for _, key in ipairs({ "makeRoom", "colorText", "colorBackground", "stripText", "safeGlow", "colorBar", "hideTrivial" }) do
         if db[key] == nil then db[key] = d[key] end
         db[key] = db[key] == true
     end
+    db.glow = nil -- retired: aggro glow is not part of the indicator
+    db.safeTankGUID = type(db.safeTankGUID) == "string" and db.safeTankGUID or nil
+    local safeColor = type(db.safeGlowColor) == "table" and db.safeGlowColor or d.safeGlowColor
+    db.safeGlowColor = {
+        clamp(safeColor[1], 0, 1, d.safeGlowColor[1]),
+        clamp(safeColor[2], 0, 1, d.safeGlowColor[2]),
+        clamp(safeColor[3], 0, 1, d.safeGlowColor[3]),
+    }
     db.glowReach = math.floor(clamp(db.glowReach, 10, 80, d.glowReach) + 0.5)
     db.glowStrength = math.floor(clamp(db.glowStrength, 10, 100, d.glowStrength) + 0.5)
     db.glowFeather = math.floor(clamp(db.glowFeather, 5, 100, d.glowFeather) + 0.5)
-    db.onlyInstances = db.onlyInstances == true
+    local legacyOnlyInstances = db.onlyInstances == true
+    if db.showInGroup == nil then db.showInGroup = d.showInGroup else db.showInGroup = db.showInGroup == true end
+    if db.showSolo == nil then db.showSolo = not legacyOnlyInstances else db.showSolo = db.showSolo == true end
+    db.onlyInstances = nil
     db.value, db.offTank = nil, nil -- retired settings: the number is chosen automatically, off-tank color is always on
     db.minimap = type(db.minimap) == "table" and db.minimap or {}
     db.minimap.hide = db.minimap.hide == true
@@ -260,15 +273,6 @@ function ns.LeadColor(lead)
     return ns.GradientColor((tonumber(lead) or 100) - 100, true)
 end
 
--- Preview: warn at the bad end of the slider (tank near 0 %, everybody else near 100 %).
-function ns.PreviewWarn()
-    if ns.warnTest then return true end -- the Test button
-    if ns.previewOffTank then return false end
-    local tank = ns.GetRole() == "tank"
-    local percent = ns.previewPercent or 0
-    return (tank and percent <= 10) or (not tank and percent >= 90)
-end
-
 -- Color for a readable percentage; a co-tank or pet holding the mob wins (tank only).
 function ns.ColorForPercent(percent, role, offTank)
     if offTank and role == "tank" then return ns.COLORS.offtank end
@@ -291,8 +295,8 @@ function ns.StatusColorKey(status, role, offTank)
     return "good"
 end
 
--- Safe target: a tank or pet holds the enemy and you are not on its threat list (nil) or far below the holder (0).
--- A secret status (false) is never safe. Threat numbers are secret, so this is a yes/no, not a ranking.
+-- Safe target requires both a clear holder lead and a player threat status of nil or 0.
+-- A secret status (false) never qualifies; this is a yes/no recommendation, not a threat ranking.
 -- Glow profile: how much of the glow covers a point k layers out (k = 1..n); 1 at the bar, 0 past the last layer.
 -- feather (5..100 %): the fade starts at (100 - feather) % of the reach and takes the rest; 100 = fades throughout.
 function ns.GlowCoverage(k, n, feather)
@@ -307,26 +311,38 @@ function ns.IsSafeStatus(status)
     return status == nil or status == 0
 end
 
--- candidates = { unit = targetedByHolder }. If a holder targets some of them, only those; else all.
+-- candidates = { unit = { targeted = true, mainTank = bool, holderOrder = number, leadScore = number } }.
+-- A safe current tank target wins, then the largest confirmed lead, then tank assignment and roster order.
 function ns.PickSafe(candidates)
-    local anyTargeted, picks = false, {}
-    for _, targeted in pairs(candidates) do
-        if targeted then anyTargeted = true end
+    local bestUnit, bestTarget, bestLead, bestRank, bestOrder
+    for unit, candidate in pairs(candidates) do
+        if type(candidate) == "table" then
+            local targeted = candidate.targeted == true
+            local lead = tonumber(candidate.leadScore) or -math.huge
+            local rank = candidate.mainTank == true and 0 or candidate.holder == "pet" and 2 or 1
+            local order = tonumber(candidate.holderOrder) or math.huge
+            if bestUnit == nil or (targeted and not bestTarget)
+                or (targeted == bestTarget and lead > bestLead)
+                or (targeted == bestTarget and lead == bestLead and rank < bestRank)
+                or (targeted == bestTarget and lead == bestLead and rank == bestRank and order < bestOrder)
+                or (targeted == bestTarget and lead == bestLead and rank == bestRank and order == bestOrder
+                    and tostring(unit) < tostring(bestUnit)) then
+                bestUnit, bestTarget, bestLead, bestRank, bestOrder = unit, targeted, lead, rank, order
+            end
+        end
     end
-    for unit, targeted in pairs(candidates) do
-        if targeted or not anyTargeted then picks[unit] = true end
-    end
-    return picks
+    return bestUnit and { [bestUnit] = true } or {}
 end
 
 ----------------------------------------------------------------------------------------------------
 -- Filters
 ----------------------------------------------------------------------------------------------------
 
--- classification: UnitClassification token or nil; inInstance: boolean.
-function ns.ShouldShow(db, classification, inInstance)
+-- classification: UnitClassification token or nil; inGroup: boolean.
+function ns.ShouldShow(db, classification, inInstance, inGroup)
     if not db.enabled then return false end
-    if db.onlyInstances and not inInstance then return false end
+    if inGroup and not db.showInGroup then return false end
+    if not inGroup and not db.showSolo then return false end
     if db.hideTrivial and (classification == "trivial" or classification == "minus") then return false end
     return true
 end
@@ -429,7 +445,10 @@ ns.MOCK_W, ns.MOCK_H = 628, 150
 ns.MOCK_ZONES = {
     { mode = "badge", side = "right", text = "Badge right" }, { mode = "badge", side = "left", text = "Badge left" },
     { mode = "badge", side = "top", text = "Badge above" }, { mode = "badge", side = "bottom", text = "Badge below" },
-    { mode = "strip", side = "top", text = "Strip above" }, { mode = "strip", side = "bottom", text = "Strip below" },
+    { mode = "strip", side = "top", text = "Strip above", anchor = 1 },
+    { mode = "strip", side = "top", text = "Strip above", anchor = 2 },
+    { mode = "strip", side = "bottom", text = "Strip below", anchor = 1 },
+    { mode = "strip", side = "bottom", text = "Strip below", anchor = 2 },
     -- Inside the bar's ends: a segment that pushes the health text aside.
     { mode = "segment", side = "left", text = "Bar left end" }, { mode = "segment", side = "right", text = "Bar right end" },
 } -- dropping on a strip or bar-end spot switches the look; there is no mode switch
@@ -466,6 +485,19 @@ function ns.MockZoneRect(zone)
     local l = p[1]:find("LEFT") and ax or p[1]:find("RIGHT") and ax - w or ax - w / 2
     local b = p[1]:find("BOTTOM") and ay or p[1]:find("TOP") and ay - spec.h or ay - spec.h / 2
     return l, b, l + w, b + spec.h
+end
+
+-- Strip placement has two real end anchors; expose both as separate drop spots in the preview.
+function ns.MockZoneSnapRect(zone)
+    if not zone.anchor then return ns.MockZoneRect(zone) end
+    local bar, level = mockRects()
+    local rects = { bar = bar, level = level }
+    local spec = ns.Layout(zone.mode, zone.side, MOCK_MEASURE, nil)
+    local p = spec.points[zone.anchor]
+    if not p then return ns.MockZoneRect(zone) end
+    local x, y = rectPoint(rects[p[2]], p[3])
+    x, y = x + p[4], y + p[5]
+    return x - 8, y - 8, x + 8, y + 8
 end
 
 -- Each snap spot is a dot at the center of its rect. Index of the dot closest to (x, y) within 22 px, or nil.

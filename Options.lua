@@ -56,22 +56,25 @@ local TIPS = {
     ["Make room (move nameplate elements aside)"] = "Moves the nameplate's name, raid icon, elite dragon, crowd-control icons or health text aside so nothing overlaps the element. Blizzard nameplates only.",
     ["Color the number"] = "The threat number takes the threat color (green at 0 %, red at 100 %).",
     ["Color the background"] = "The badge or segment background takes the threat color. With a colored number as well, the background uses a darker shade so the number stays readable.",
-    ["Color the nameplate bar"] = "Tints the enemy's health bar itself with the threat color. Blizzard nameplates only.",
+    ["Color the health bar"] = "Colors only the filled part of the health bar. The empty track and the rest of the nameplate stay dark. Blizzard nameplates only.",
     ["Number on the strip"] = "Strip mode only: shows the threat number next to the right end of the thin threat bar. Off = the bar alone.",
+    ["Safe target glow"] = "Highlights one attackable enemy with a confirmed safe threat lead over you. The selected tank's current target takes priority.",
+    ["Safe glow color"] = "Choose the color used around the recommended enemy.",
+    ["Tank for safe-target recommendations"] = "Automatic uses the assigned or detected tank. Choose a group member to override that choice for this group.",
     ["Role"] = "Decides the color direction. Automatic detects tanks by stance, form or aura, then by group role or specialization. As a tank, holding the enemy is green; otherwise it is red.",
     ["Size"] = "Only for a freely dragged badge: scales it from half to double size.",
     ["Reset position"] = "Only for a freely dragged badge: back to the bar's top-left corner at normal size.",
     ["Enable TrisThreat"] = "Turns TrisThreat on or off.",
-    ["Only in instances"] = "Show the element only in dungeons, raids and other instances.",
+    ["Show solo"] = "Show TrisThreat when you are not in a party or raid.",
+    ["Show in group"] = "Show TrisThreat while grouped, including in the open world.",
     ["Hide on trivial mobs"] = "No element on trivial or minor enemies.",
     ["Show minimap icon"] = "Shows the TrisThreat button on the minimap. Right-click the button to hide it.",
     ["Preview threat"] = "Try a threat value: the preview above and your current target show it, no combat needed.",
     ["Off-tank"] = "Preview the off-tank color (blue, tanks only).",
-    ["Aggro warning glow"] = "A pulsing red glow around the element when it matters: as a tank when you lose the enemy (and no other tank has it), otherwise when you pull it.",
     ["Reach"] = "How far the glow spreads outwards from the health bar.",
     ["Strength"] = "How bright the glow is right at the bar (its opacity).",
     ["Feather"] = "How soft the edge is. 100 % fades smoothly over the whole reach; lower values stay bright longer and then fade faster.",
-    ["Safe target glow"] = "A green glow on the enemy that is safest to attack: a group tank or your pet holds it and you are not on its threat list. If the tank is targeting one of them, only that one glows. Not for tanks.",
+    ["Safe target glow"] = "Shows one green recommendation when a group tank (or, if no tank is assigned, another group member or your pet) is targeting an enemy and has a clear threat lead over the next holder. You must not be on that enemy's threat list. Not for tanks.",
 }
 
 local function addTooltip(widget, text)
@@ -375,8 +378,10 @@ local function buildMock(parent, y)
         for _, f in ipairs(mock.zones) do
             local l, b, r, t = ns.MockZoneRect(f.zone)
             f.rect = { l, b, r, t }
+            local sl, sb, sr, st = ns.MockZoneSnapRect(f.zone)
+            f.snapRect = { sl, sb, sr, st }
             f:ClearAllPoints()
-            f:SetPoint("CENTER", panel, "BOTTOMLEFT", (l + r) / 2, (b + t) / 2)
+            f:SetPoint("CENTER", panel, "BOTTOMLEFT", (sl + sr) / 2, (sb + st) / 2)
             f:Show()
         end
         if fresh then
@@ -405,7 +410,7 @@ local function buildMock(parent, y)
             local es = panel:GetEffectiveScale()
             local px, py = cx / es - (panel:GetLeft() or 0), cy / es - (panel:GetBottom() or 0)
             local rects = {}
-            for i, f in ipairs(mock.zones) do rects[i] = f.rect end
+            for i, f in ipairs(mock.zones) do rects[i] = f.snapRect end
             local index = ns.PickMockZone(px, py, rects)
             local active = index and mock.zones[index]
             paintZones(active)
@@ -435,24 +440,15 @@ local function buildMock(parent, y)
     ns.mock = mock
 end
 
--- Plays a glow once in the preview (when its checkbox is toggled or Test is pressed), then restores the real state.
--- kind "aggro" (default): red halo around the element; "safe": green halo around the bar. With a target selected
--- the real plate shows it as well.
+-- Shows the safe-target halo in the preview and briefly on the real target.
 local flashToken = 0
-ns.glowKind = "aggro" -- the glow the shape sliders show
-function ns.FlashGlow(kind, mockOnly)
+ns.glowKind = "safe"
+function ns.FlashGlow(_, mockOnly)
     if not mock then return end
-    kind = kind or "aggro"
-    ns.glowKind = kind
     flashToken = flashToken + 1
     local token = flashToken
-    if kind == "safe" then
-        ns.ShowBroadGlow(mock, "safeGlow", ns.GLOW_GREEN, mock.parts, mock.element)
-        if ns.TestSafeGlow and not mockOnly then ns.TestSafeGlow() end
-    else
-        ns.ShowBroadGlow(mock.element, "warnGlow", ns.GLOW_RED, mock.parts, mock.element)
-        if ns.TestWarn and not mockOnly then ns.TestWarn() end
-    end
+    ns.ShowBroadGlow(mock, "safeGlow", ns.GetSafeGlowColor(), mock.parts, mock.element)
+    if ns.TestSafeGlow and not mockOnly then ns.TestSafeGlow() end
     C_Timer.After(1.6, function()
         if token ~= flashToken then return end
         ns.HideBroadGlow(mock, "safeGlow")
@@ -468,7 +464,7 @@ function ns.RefreshMock()
     local barColor = db.colorBar and color or { 0.78, 0.12, 0.12 }
     mock.bar:SetStatusBarColor(barColor[1], barColor[2], barColor[3])
     ns.Arrange(mock.element, mock.parts)
-    ns.PaintElement(mock.element, color, ns.previewPercent .. "%", ns.previewPercent, true, 0, 100, ns.PreviewWarn())
+    ns.PaintElement(mock.element, color, ns.previewPercent .. "%", ns.previewPercent, true, 0, 100)
     if mock.percentText then mock.percentText:SetText(ns.previewPercent .. "%") end
 end
 
@@ -560,7 +556,7 @@ local function build()
     heading(frame, "Colors", COL1, yl); yl = yl - 24
     -- One checkbox per row: two columns clipped the longer labels under their neighbour.
     for _, c in ipairs({ { "Color the number", "colorText" }, { "Color the background", "colorBackground" },
-        { "Color the nameplate bar", "colorBar" }, { "Number on the strip", "stripText" } }) do
+        { "Color the health bar", "colorBar" }, { "Number on the strip", "stripText" } }) do
         checkbox(frame, c[1], COL1, yl, c[2]); yl = yl - 24
     end
     yl = yl - 6
@@ -569,20 +565,133 @@ local function build()
     legend:SetWidth(COLW)
     legend:SetJustifyH("LEFT")
 
-    -- Glows: each one can be switched on or off and tried with Test (preview, and the real target plate).
+    -- Safe indicator controls: the recommendation glow stays outside the health bar.
     yl = ROW3
-    heading(frame, "Glows", COL1, yl); yl = yl - 24
-    for _, g in ipairs({ { "Aggro warning glow", "glow", "aggro" }, { "Safe target glow", "safeGlow", "safe" } }) do
-        checkbox(frame, g[1], COL1, yl, g[2], function() ns.FlashGlow(g[3]) end)
-        local test = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-        test:SetSize(60, 22)
-        test:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + COLW - 62, yl + 1)
-        test:SetText(L["Test"])
-        test:SetScript("OnClick", function() ns.FlashGlow(g[3]) end)
-        yl = yl - 26
+    heading(frame, "Safe indicator", COL1, yl); yl = yl - 24
+    checkbox(frame, "Safe target glow", COL1, yl, "safeGlow", function() ns.FlashGlow("safe") end)
+    local test = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    test:SetSize(60, 22)
+    test:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + COLW - 62, yl + 1)
+    test:SetText(L["Test"])
+    test:SetScript("OnClick", function() ns.FlashGlow("safe") end)
+    yl = yl - 28
+
+    local safeColorButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    safeColorButton:SetSize(92, 22)
+    safeColorButton:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 2, yl)
+    safeColorButton:SetText("")
+    safeColorButton.caption = safeColorButton:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    safeColorButton.caption:SetPoint("CENTER", safeColorButton, "CENTER", 4, 0)
+    safeColorButton.caption:SetText("Glow color")
+    safeColorButton.swatch = safeColorButton:CreateTexture(nil, "OVERLAY")
+    safeColorButton.swatch:SetTexture("Interface\\Buttons\\WHITE8X8")
+    safeColorButton.swatch:SetSize(12, 12)
+    safeColorButton.swatch:SetPoint("LEFT", safeColorButton, "LEFT", 5, 0)
+    addTooltip(safeColorButton, "Safe glow color")
+    local safeTankButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    safeTankButton:SetSize(132, 22)
+    safeTankButton:SetPoint("LEFT", safeColorButton, "RIGHT", 6, 0)
+    local safeTankMenu = CreateFrame("Frame", "TrisThreatSafeTankMenu", UIParent, "UIDropDownMenuTemplate")
+    safeTankButton:SetScript("OnClick", function(self)
+        UIDropDownMenu_Initialize(safeTankMenu, function(menu, level)
+            local function addChoice(text, guid)
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = text
+                info.checked = TrisThreatDB.safeTankGUID == guid
+                info.func = function()
+                    TrisThreatDB.safeTankGUID = guid
+                    UIDropDownMenu_SetText(safeTankMenu, guid and "Tank: Manual" or "Tank: Auto")
+                    CloseDropDownMenus()
+                    ns.RefreshAll()
+                    if ns.RefreshOptions then ns.RefreshOptions() end
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
+            addChoice("Automatic", nil)
+            local prefix, count
+            if IsInRaid and IsInRaid() then prefix, count = "raid", GetNumGroupMembers()
+            elseif IsInGroup and IsInGroup() then prefix, count = "party", GetNumSubgroupMembers() end
+            for index = 1, count or 0 do
+                local unit = prefix .. index
+                local same = UnitIsUnit(unit, "player")
+                local guid = UnitGUID(unit)
+                if guid and not issecretvalue(guid) and (same == false or issecretvalue(same)) then
+                    local ok, name = pcall(UnitName, unit)
+                    if not ok or issecretvalue(name) or type(name) ~= "string" then name = unit end
+                    addChoice(name, guid)
+                end
+            end
+        end, "MENU")
+        ToggleDropDownMenu(1, nil, safeTankMenu, self, 0, 0)
+    end)
+    safeColorButton:SetScript("OnClick", function()
+        local picker = ColorPickerFrame
+        if not picker then return end
+        local color = ns.GetSafeGlowColor()
+        local previous = { color[1], color[2], color[3] }
+        local function apply(r, g, b)
+            TrisThreatDB.safeGlowColor = { r, g, b }
+            safeColorButton.swatch:SetVertexColor(r, g, b, 1)
+            ns.RefreshAll()
+            ns.RefreshMock()
+        end
+        local function restore(old)
+            if old then apply(old.r or old[1], old.g or old[2], old.b or old[3]) end
+        end
+        if picker.SetupColorPickerAndShow then
+            picker:SetupColorPickerAndShow({
+                r = previous[1], g = previous[2], b = previous[3], hasOpacity = false,
+                swatchFunc = function() local r, g, b = picker:GetColorRGB(); apply(r, g, b) end,
+                cancelFunc = restore,
+            })
+        else
+            picker.func = function() apply(picker:GetColorRGB()) end
+            picker.cancelFunc = restore
+            picker.previousValues = { previous[1], previous[2], previous[3] }
+            picker:SetColorRGB(previous[1], previous[2], previous[3])
+            picker:Show()
+        end
+    end)
+    local function refreshSafeTankButton()
+        local guid = TrisThreatDB.safeTankGUID
+        if not guid then safeTankButton:SetText("Tank: Auto"); return end
+        local prefix, count
+        if IsInRaid and IsInRaid() then prefix, count = "raid", GetNumGroupMembers()
+        elseif IsInGroup and IsInGroup() then prefix, count = "party", GetNumSubgroupMembers() end
+        for index = 1, count or 0 do
+            local unit = prefix .. index
+            if UnitGUID(unit) == guid then
+                local ok, name = pcall(UnitName, unit)
+                if ok and not issecretvalue(name) and type(name) == "string" then
+                    safeTankButton:SetText(name)
+                    return
+                end
+            end
+        end
+        safeTankButton:SetText("Tank: Manual")
     end
-    yl = yl - 4
-    -- Shape of both glows; the preview shows the one tested last while a slider moves.
+    controls[#controls + 1] = refreshSafeTankButton
+    controls[#controls + 1] = function()
+        local color = ns.GetSafeGlowColor()
+        safeColorButton.swatch:SetVertexColor(color[1], color[2], color[3], 1)
+    end
+    safeTankButton:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine("Tank for safe-target recommendations", 1, 0.82, 0.2)
+        local unit = ns.GetSafeTankUnit()
+        if unit then
+            local ok, name = pcall(UnitName, unit)
+            GameTooltip:AddLine(ok and not issecretvalue(name) and type(name) == "string" and name or unit, 1, 1, 1)
+        else
+            GameTooltip:AddLine("No tank detected", 1, 1, 1)
+        end
+        GameTooltip:AddLine("Click to choose a group member or use automatic detection.", 0.85, 0.88, 0.94)
+        GameTooltip:Show()
+    end)
+    safeTankButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    yl = yl - 30
+    -- Reach controls only the outside glow; the four bands never cross the health-bar rectangle.
     for _, s in ipairs({ { "Reach", "glowReach", 10, 80, 2, " px" }, { "Strength", "glowStrength", 10, 100, 5, " %" },
         { "Feather", "glowFeather", 5, 100, 5, " %" } }) do
         compactSlider(frame, s[1], COL1, yl, s[2], s[3], s[4], s[5], s[6], function() ns.FlashGlow(ns.glowKind, true) end)
@@ -618,8 +727,9 @@ local function build()
     yr = ROW3
     heading(frame, "General", COL2, yr); yr = yr - 24
     checkbox(frame, "Enable TrisThreat", COL2, yr, "enabled"); yr = yr - 26
-    checkbox(frame, "Only in instances", COL2, yr, "onlyInstances")
-    checkbox(frame, "Hide on trivial mobs", COL2 + 150, yr, "hideTrivial"); yr = yr - 26
+    checkbox(frame, "Show solo", COL2, yr, "showSolo")
+    checkbox(frame, "Show in group", COL2 + 150, yr, "showInGroup"); yr = yr - 26
+    checkbox(frame, "Hide on trivial mobs", COL2, yr, "hideTrivial"); yr = yr - 26
     -- The minimap flag lives in a sub-table and is stored inverted (hide), so this box is built by hand.
     local mini = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
     mini:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2 - 2, yr)
@@ -754,14 +864,33 @@ SlashCmdList["TRISTHREAT"] = function(message)
                 .. ", curve " .. (okLead and "OK" or "FAILED"))
         end
         if UnitExists("target") then
-            -- Safe-target glow needs these: can we read who a tank or pet is targeting, and who holds the target?
+            -- Show the same target, holder-role, status, and lead inputs used by the safe-target selection.
             local seen = {}
-            for _, token in ipairs({ "pet", "party1", "party2", "party3", "party4" }) do
+            local tokens = { "pet" }
+            if IsInRaid and IsInRaid() then
+                for index = 1, GetNumGroupMembers() do tokens[#tokens + 1] = "raid" .. index end
+            elseif IsInGroup and IsInGroup() then
+                for index = 1, GetNumSubgroupMembers() do tokens[#tokens + 1] = "party" .. index end
+            end
+            local function probeValue(value)
+                if value == nil then return "none" end
+                if issecretvalue and issecretvalue(value) then return "secret" end
+                return tostring(value)
+            end
+            for _, token in ipairs(tokens) do
                 if UnitExists(token) then
                     local same = UnitIsUnit(token .. "target", "target")
                     local status = UnitThreatSituation(token, "target")
-                    seen[#seen + 1] = token .. " targets: " .. (same == nil and "nil" or (issecretvalue and issecretvalue(same)) and "secret" or tostring(same))
-                        .. ", threat status: " .. (status == nil and "none" or (issecretvalue and issecretvalue(status)) and "secret" or tostring(status))
+                    local role = token == "pet" and "pet" or UnitGroupRolesAssigned(token)
+                    local leadStatus, leadAvailable = nil, type(UnitThreatLeadSituation) == "function"
+                    if leadAvailable then
+                        local ok, value = pcall(UnitThreatLeadSituation, token, "target")
+                        if ok then leadStatus = value else leadStatus = "error" end
+                    end
+                    seen[#seen + 1] = token .. " role: " .. probeValue(role)
+                        .. ", targets: " .. probeValue(same)
+                        .. ", threat status: " .. probeValue(status)
+                        .. ", lead state: " .. (leadAvailable and probeValue(leadStatus) or "API unavailable")
                 end
             end
             print("|cffe0ad3dTrisThreat|r probe: safe target - " .. (#seen > 0 and table.concat(seen, "; ") or "no group member or pet"))

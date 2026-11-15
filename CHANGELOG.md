@@ -1,5 +1,11 @@
 # TrisThreat
 
+## Unreleased
+
+- Removed the red aggro-warning glow. The safe-target indicator recommends one attackable enemy with a confirmed threat lead, prioritizes the selected tank's target, and supports automatic or per-group tank selection.
+- Added safe-glow color selection and fades between recommendations. Glow bands stay translucent outside the health-bar rectangle so current HP remains visible.
+- Added separate Solo and Group visibility controls. The health-bar color option applies to the filled portion only.
+
 ## 0.1.0
 
 - First version: a threat element attached to the health bar of every enemy nameplate that fights you, with the threat value. The nameplate bar itself can be tinted by threat (Platynator and Blizzard nameplates).

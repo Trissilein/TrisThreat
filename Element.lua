@@ -60,84 +60,69 @@ function ns.CreateElement()
     return el
 end
 
--- Glow around the health bar shaped like a pill (rounded ends): 24 nested pills, each one a bit bigger than the
--- last (settings: reach, strength, feather), each adding a little light (ADD blend), so the sum fades smoothly from bright at the bar to nothing.
--- A pill = a rectangle plus two half circles (circle mask). The light is in the color values, not the alpha
--- (alpha is not reliable with ADD). Red for the aggro warning, green for the safe target.
-ns.GLOW_RED, ns.GLOW_GREEN = { 1, 0.12, 0.05 }, { 0.18, 0.85, 0.30 }
+-- Safe-target glow uses layered bands outside the health-bar rectangle, so its fill and dark track stay readable.
+ns.GLOW_GREEN = { 0.18, 0.85, 0.30 }
+function ns.GetSafeGlowColor()
+    return TrisThreatDB and TrisThreatDB.safeGlowColor or ns.GLOW_GREEN
+end
 local GLOW_LAYERS = 24
 local GLOW_GAP = 2 -- starts just outside the bar's own border
-local CIRCLE = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 
 -- Light of layer i: a point k layers out is covered by all layers >= k, so a layer adds cover(i) - cover(i + 1).
 local function layerLight(i)
     local db = TrisThreatDB
     local peak = (db.glowStrength or 90) / 100
     local feather = db.glowFeather or 100
-    return (ns.GlowCoverage(i, GLOW_LAYERS, feather) - ns.GlowCoverage(i + 1, GLOW_LAYERS, feather)) * peak
+    return ns.GlowCoverage(i, GLOW_LAYERS, feather) * peak
 end
 
 -- Applies the strength/feather settings to a glow's layers.
 local function colorGlow(g)
     for i, layer in ipairs(g.layers) do
         local c = layerLight(i)
-        for _, region in ipairs({ layer.center, layer.left, layer.right }) do
-            region:SetVertexColor(g.color[1] * c, g.color[2] * c, g.color[3] * c, 1)
+        for _, region in ipairs({ layer.top, layer.bottom, layer.left, layer.right }) do
+            region:SetVertexColor(g.color[1], g.color[2], g.color[3], c)
         end
     end
 end
 
 function ns.CreateBroadGlow(color)
     local f = CreateFrame("Frame", nil, UIParent)
-    f.layers, f.color = {}, color
+    f.layers, f.color = {}, color or ns.GetSafeGlowColor()
+    f:SetAlpha(0)
     for i = 1, GLOW_LAYERS do
-        local function part(masked)
+        local function part()
             local t = f:CreateTexture(nil, "BACKGROUND")
             t:SetTexture(WHITE)
-            t:SetBlendMode("ADD")
-            local m
-            if masked then
-                m = f:CreateMaskTexture()
-                m:SetTexture(CIRCLE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-                t:AddMaskTexture(m)
-            end
-            return t, m
+            t:SetBlendMode("BLEND")
+            return t
         end
         local layer = {}
-        layer.center = part(false)
-        layer.left, layer.leftMask = part(true)
-        layer.right, layer.rightMask = part(true)
+        layer.top, layer.bottom, layer.left, layer.right = part(), part(), part(), part()
         f.layers[i] = layer
     end
-    f.pulse = f:CreateAnimationGroup()
-    f.pulse:SetLooping("BOUNCE")
-    local fade = f.pulse:CreateAnimation("Alpha")
-    fade:SetFromAlpha(0.4)
-    fade:SetToAlpha(1)
-    fade:SetDuration(0.55)
     return f
 end
 
--- Lays the pills out for a glow frame of w x h: every layer grows by reach / layers, its ends are half circles of
--- radius h/2 + growth (a left and a right cap, each cut at the pill's middle section).
+-- Each translucent band stays outside the health-bar rectangle, so neither the fill nor its dark track is covered.
 local function layoutGlow(g, w, h)
     g.layW, g.layH = w, h
-    w = math.max(w, h)
-    local half = h / 2
-    local step = (TrisThreatDB.glowReach or 40) / GLOW_LAYERS
+    local reach = TrisThreatDB.glowReach or 40
+    local gap = GLOW_GAP
+    local left, top = reach + gap, reach + gap
+    local right, bottom = left + w, top + h
+    local step = reach / GLOW_LAYERS
     for i, layer in ipairs(g.layers) do
-        local e = (i - 1) * step
-        local full = h + 2 * e
-        local function put(region, p1, rel1, x1, y1, p2, rel2, x2, y2)
+        local inner, outer = gap + (i - 1) * step, gap + i * step
+        local function put(region, x1, y1, x2, y2)
             region:ClearAllPoints()
-            region:SetPoint(p1, g, rel1, x1, y1)
-            region:SetPoint(p2, g, rel2, x2, y2)
+            region:SetPoint("TOPLEFT", g, "TOPLEFT", x1, -y1)
+            region:SetPoint("BOTTOMRIGHT", g, "TOPLEFT", x2, -y2)
         end
-        put(layer.center, "TOPLEFT", "TOPLEFT", half, e, "BOTTOMRIGHT", "TOPRIGHT", -half, -(h + e))
-        put(layer.left, "TOPLEFT", "TOPLEFT", -e, e, "BOTTOMRIGHT", "TOPLEFT", half, -(h + e))
-        put(layer.leftMask, "TOPLEFT", "TOPLEFT", -e, e, "BOTTOMRIGHT", "TOPLEFT", -e + full, e - full)
-        put(layer.right, "TOPLEFT", "TOPRIGHT", -half, e, "BOTTOMRIGHT", "TOPRIGHT", e, -(h + e))
-        put(layer.rightMask, "TOPLEFT", "TOPRIGHT", e - full, e, "BOTTOMRIGHT", "TOPRIGHT", e, e - full)
+        put(layer.top, left - outer, top - outer, right + outer, top - inner)
+        put(layer.bottom, left - outer, bottom + inner, right + outer, bottom + outer)
+        put(layer.left, left - outer, top, left - inner, bottom)
+        put(layer.right, right + inner, top, right + outer, bottom)
     end
 end
 
@@ -147,45 +132,67 @@ function ns.PlaceBroadGlow(g, parts, el)
     local parent = parts.uf
     g:SetParent(parent)
     g:SetFrameStrata(parent:GetFrameStrata())
-    -- On real plates one level behind the plate's own art, so the name and icons stay on top of the light.
-    g:SetFrameLevel(parts.mock and parent:GetFrameLevel() or math.max(0, parent:GetFrameLevel() - 1))
+    -- Keep the additive light behind the health bar so its empty track remains legible.
+    local barLevel = parts.bar and parts.bar.GetFrameLevel and parts.bar:GetFrameLevel()
+    local glowLevel = type(barLevel) == "number" and barLevel - 1 or parent:GetFrameLevel()
+    g:SetFrameLevel(math.max(parent:GetFrameLevel(), glowLevel))
     g:ClearAllPoints()
-    local stripSide = el and el.look == "strip" and el:IsShown()
-        and ns.EffectiveSide(TrisThreatDB.mode, TrisThreatDB.side)
-    if stripSide == "top" then
-        g:SetPoint("TOPLEFT", el, "TOPLEFT", -2 - GLOW_GAP, 3 + GLOW_GAP)
-        g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", GLOW_GAP, -GLOW_GAP)
-    elseif stripSide == "bottom" then
-        g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -GLOW_GAP, GLOW_GAP)
-        g:SetPoint("BOTTOMRIGHT", el, "BOTTOMRIGHT", 6 + GLOW_GAP, -6 - GLOW_GAP)
-    else
-        g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -GLOW_GAP, GLOW_GAP)
-        g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", GLOW_GAP, -GLOW_GAP)
-    end
-    -- The pills need the frame's size; if the engine has not resolved the anchors yet, use the bar's size.
-    local w, h = g:GetWidth(), g:GetHeight()
-    if type(w) ~= "number" or type(h) ~= "number" or w < 2 or h < 2 then
-        local m = ns.Measure(parts)
-        w, h = m.barW + 2 * GLOW_GAP, m.barH + 2 * GLOW_GAP
-    end
+    local reach = TrisThreatDB.glowReach or 40
+    g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -reach - GLOW_GAP, reach + GLOW_GAP)
+    g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", reach + GLOW_GAP, -reach - GLOW_GAP)
+    local m = ns.Measure(parts)
+    local w, h = m.barW, m.barH
     local db = TrisThreatDB
     local style = (db.glowReach or 40) .. ":" .. (db.glowStrength or 90) .. ":" .. (db.glowFeather or 100)
+        .. ":" .. table.concat(g.color, ":")
     if g.style ~= style then g.style = style; colorGlow(g); g.layW = nil end -- settings changed: recolor, relayout
     if g.layW ~= w or g.layH ~= h then layoutGlow(g, w, h) end
+end
+
+-- A pooled or reparented element must not keep a glow anchored across two nameplate trees.
+function ns.DetachBroadGlow(g)
+    if not g then return end
+    if g.transition then g.transition:Stop() end
+    g:Hide()
+    g:ClearAllPoints()
+    g:SetParent(UIParent)
+end
+
+function ns.FadeBroadGlow(g, from, to, duration, onFinished)
+    if not g then return end
+    if not g.transition then
+        g.transition = g:CreateAnimationGroup()
+        g.transitionAlpha = g.transition:CreateAnimation("Alpha")
+        g.transitionAlpha:SetOrder(1)
+    end
+    g.transition:Stop()
+    g.transitionAlpha:SetFromAlpha(from)
+    g.transitionAlpha:SetToAlpha(to)
+    g.transitionAlpha:SetDuration(duration)
+    g.transitionDone = onFinished
+    g.transition:SetScript("OnFinished", function()
+        local finish = g.transitionDone
+        g.transitionDone = nil
+        g:SetAlpha(to)
+        if finish then finish() end
+    end)
+    g:SetAlpha(from)
+    g.transition:Play()
 end
 
 -- A glow kept on `owner[key]` (an element, so each plate has its own). el = the threat element, see above.
 function ns.ShowBroadGlow(owner, key, color, parts, el)
     local g = owner[key]
     if not g then g = ns.CreateBroadGlow(color); owner[key] = g end
+    g.color = color or ns.GetSafeGlowColor()
     ns.PlaceBroadGlow(g, parts, el)
     g:Show()
-    if not g.pulse:IsPlaying() then g.pulse:Play() end
+    if g:GetAlpha() < 1 then ns.FadeBroadGlow(g, g:GetAlpha(), 1, 0.15) end
 end
 
 function ns.HideBroadGlow(owner, key)
     local g = owner and owner[key]
-    if g then g.pulse:Stop(); g:Hide() end
+    if g then if g.transition then g.transition:Stop() end; g:SetAlpha(1); g:Hide() end
 end
 
 -- Switches the regions to one look. Only runs when the look or side changes.
@@ -246,7 +253,14 @@ end
 
 -- parts = { uf = frame to parent to, bar = health bar, level = level badge frame or nil }.
 function ns.PlaceElement(el, parts, spec)
-    local parent = parts.uf
+    -- Make the element a sibling of the health bar. A child of the unit frame anchored to its descendant
+    -- can create a Blizzard anchor-family cycle.
+    local parent = parts.bar and parts.bar.GetParent and parts.bar:GetParent() or parts.uf
+    local previousParent = el.GetParent and el:GetParent()
+    if previousParent and previousParent ~= parent then
+        ns.DetachBroadGlow(el.safeGlow)
+        el:ClearAllPoints()
+    end
     el:SetParent(parent)
     el:SetFrameStrata(parent:GetFrameStrata())
     -- In the world: above Blizzard's level badge (frameLevel 50). In the options preview only a few levels
@@ -271,7 +285,7 @@ local function setBarColor(bar, color, alpha)
 end
 
 -- color = { r, g, b } (may hold secret numbers); value = threat percentage for the strip fill.
-function ns.PaintElement(el, color, text, value, selected, low, high, glow)
+function ns.PaintElement(el, color, text, value, selected, low, high)
     local db = TrisThreatDB
     color = color or ns.COLORS.unknown
     if el.look == "strip" then
@@ -303,11 +317,6 @@ function ns.PaintElement(el, color, text, value, selected, low, high, glow)
         el.text:SetTextColor(1, 1, 1, 1)
     end
     el.selected:SetShown(selected == true and (el.look == "badge") and el.selected:GetAtlas() ~= nil)
-    if glow and db.glow and el.parts then
-        ns.ShowBroadGlow(el, "warnGlow", ns.GLOW_RED, el.parts, el)
-    else
-        ns.HideBroadGlow(el, "warnGlow")
-    end
     el:Show()
 end
 

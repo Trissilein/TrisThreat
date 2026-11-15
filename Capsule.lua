@@ -4,6 +4,8 @@ local issecretvalue = issecretvalue or function() return false end
 local active = {}   -- unit token -> element
 local pool = {}
 local tints = {}    -- unit token -> color while the Blizzard health bar is tinted by threat
+local safeGlows, safePool = {}, {}
+local selectedSafeUnit, pendingSafeUnit, pendingSafeSince
 local preview       -- element shown on the target while the options window is open
 
 ----------------------------------------------------------------------------------------------------
@@ -72,17 +74,22 @@ function ns.Arrange(el, parts)
 end
 
 ----------------------------------------------------------------------------------------------------
--- Health bar tint (Blizzard plates only, option "Color the nameplate bar")
+-- Health bar tint (Blizzard plates only, option "Color the health bar")
 ----------------------------------------------------------------------------------------------------
 
 local function applyTint(bar, color)
-    pcall(bar.SetStatusBarColor, bar, color[1], color[2], color[3])
+    local texture = bar and bar.GetStatusBarTexture and bar:GetStatusBarTexture()
+    if texture and texture.SetVertexColor then
+        pcall(texture.SetVertexColor, texture, color[1], color[2], color[3], 1)
+    end
 end
 
 if CompactUnitFrame_UpdateHealthColor then
     hooksecurefunc("CompactUnitFrame_UpdateHealthColor", function(frame)
         local unit = frame and frame.unit
-        if unit and not issecretvalue(unit) and tints[unit] and frame.healthBar then applyTint(frame.healthBar, tints[unit]) end
+        if unit and not issecretvalue(unit) and frame.healthBar then
+            if tints[unit] then applyTint(frame.healthBar, tints[unit]) end
+        end
     end)
 end
 
@@ -106,7 +113,13 @@ local function release(unit)
     local el = active[unit]
     if not el then return end
     active[unit] = nil
-    ns.HideBroadGlow(el, "warnGlow")
+    local safe = el.safeGlow
+    if safe then
+        safeGlows[unit] = nil
+        ns.DetachBroadGlow(safe)
+        safePool[#safePool + 1] = safe
+        el.safeGlow = nil
+    end
     ns.ReleaseForeign(el)
     if el.parts then
         clearTint(unit, el.parts)
@@ -191,6 +204,37 @@ local function holds(tankUnit, unit)
     return status ~= nil and not issecretvalue(status) and status == 3
 end
 
+-- Only recommend a target when the current holder has a clear lead over the next threat holder.
+local function safeLead(holder, unit)
+    if type(UnitThreatPercentageOfLead) == "function" then
+        local ok, lead = pcall(UnitThreatPercentageOfLead, holder, unit)
+        if ok and type(lead) == "number" and not issecretvalue(lead) then
+            if lead <= 0 then return true, math.huge, "numeric" end
+            if lead >= 150 then return true, lead, "numeric" end
+            return false
+        end
+    end
+    if type(UnitThreatLeadSituation) == "function" then
+        local ok, leadStatus = pcall(UnitThreatLeadSituation, holder, unit)
+        if ok and type(leadStatus) == "number" and not issecretvalue(leadStatus) and leadStatus == 0 then
+            return true, -1, "category"
+        end
+    end
+    return false
+end
+
+local function isMainTank(holder)
+    if holder == "pet" or type(GetPartyAssignment) ~= "function" then return false end
+    local ok, assigned = pcall(GetPartyAssignment, "MAINTANK", holder)
+    return ok and not issecretvalue(assigned) and assigned == true
+end
+
+-- Only a holder's current target is a useful recommendation; prefer the assigned main tank when several hold it.
+local function targetedBy(holder, unit)
+    local same = UnitIsUnit(holder .. "target", unit)
+    return same ~= nil and not issecretvalue(same) and same == true
+end
+
 -- Is anybody besides the player (group members, their pets, your pet) on the mob's threat list?
 local function onList(other, unit)
     if not UnitExists(other) then return false end
@@ -215,25 +259,105 @@ function ns.OthersOnThreatList(unit)
     return false
 end
 
--- Token of the other tank (assigned role TANK) or your own pet that holds the mob, else nil.
+-- Prefer a group tank; without an assigned tank, allow another group member or your pet to qualify.
 local function holderOf(unit)
-    if holds("pet", unit) then return "pet" end
+    local pet = holds("pet", unit) and "pet" or nil
     local prefix, count
     if IsInRaid and IsInRaid() then prefix, count = "raid", GetNumGroupMembers()
     elseif IsInGroup and IsInGroup() then prefix, count = "party", GetNumSubgroupMembers()
-    else return nil end
+    else return pet end
+    local override = TrisThreatDB and TrisThreatDB.safeTankGUID
+    if override then
+        for index = 1, count do
+            local member = prefix .. index
+            local same = UnitIsUnit(member, "player")
+            if same ~= nil and not issecretvalue(same) and not same
+                and UnitGUID(member) == override then
+                return holds(member, unit) and member or nil
+            end
+        end
+        return nil
+    end
+    local firstTank, firstMember, hasTankRole
     for index = 1, count do
         local member = prefix .. index
         local same = UnitIsUnit(member, "player")
         if same ~= nil and not issecretvalue(same) and not same then
             local role = UnitGroupRolesAssigned(member)
-            if role == "TANK" and holds(member, unit) then return member end
+            local tankAura = false
+            if type(UnitHasEffectivelyTankAura) == "function" then
+                local ok, value = pcall(UnitHasEffectivelyTankAura, member)
+                tankAura = ok and value == true and not issecretvalue(value)
+            end
+            if role == "TANK" or tankAura then
+                hasTankRole = true
+                if holds(member, unit) then
+                    if isMainTank(member) then return member end
+                    firstTank = firstTank or member
+                end
+            elseif not issecretvalue(role) and holds(member, unit) then
+                firstMember = firstMember or member
+            end
         end
     end
-    return nil
+    return firstTank or (hasTankRole and pet) or firstMember or pet
 end
 
 local function otherHolds(unit) return holderOf(unit) ~= nil end
+
+function ns.SafeTankGUIDPresent(guid)
+    local prefix, count
+    if IsInRaid and IsInRaid() then prefix, count = "raid", GetNumGroupMembers()
+    elseif IsInGroup and IsInGroup() then prefix, count = "party", GetNumSubgroupMembers()
+    else return false end
+    for index = 1, count do
+        local unit = prefix .. index
+        local same = UnitIsUnit(unit, "player")
+        if same ~= nil and not issecretvalue(same) and not same and UnitGUID(unit) == guid then return true end
+    end
+    return false
+end
+
+function ns.GetSafeTankUnit()
+    local db = TrisThreatDB
+    if db and db.safeTankGUID then
+        local prefix, count
+        if IsInRaid and IsInRaid() then prefix, count = "raid", GetNumGroupMembers()
+        elseif IsInGroup and IsInGroup() then prefix, count = "party", GetNumSubgroupMembers()
+        else return nil end
+        for index = 1, count do
+            local unit = prefix .. index
+            local same = UnitIsUnit(unit, "player")
+            if same ~= nil and not issecretvalue(same) and not same and UnitGUID(unit) == db.safeTankGUID then
+                return unit, "manual"
+            end
+        end
+        return nil
+    end
+    local prefix, count
+    if IsInRaid and IsInRaid() then prefix, count = "raid", GetNumGroupMembers()
+    elseif IsInGroup and IsInGroup() then prefix, count = "party", GetNumSubgroupMembers()
+    else return nil end
+    local best, bestRank
+    for index = 1, count do
+        local unit = prefix .. index
+        local same = UnitIsUnit(unit, "player")
+        if same ~= nil and not issecretvalue(same) and not same then
+            local rank
+            local assigned = type(GetPartyAssignment) == "function" and GetPartyAssignment("MAINTANK", unit)
+            if assigned == true and not issecretvalue(assigned) then rank = 0
+            elseif UnitGroupRolesAssigned(unit) == "TANK" then rank = 1
+            elseif type(UnitHasEffectivelyTankAura) == "function" then
+                local ok, aura = pcall(UnitHasEffectivelyTankAura, unit)
+                if ok and aura == true and not issecretvalue(aura) then rank = 2 end
+            end
+            if rank and (not bestRank or rank < bestRank) then best, bestRank = unit, rank end
+        end
+    end
+    if best then return best, "automatic" end
+    local targetHolder = UnitExists("target") and holderOf("target")
+    return targetHolder, targetHolder and "threat" or nil
+end
 
 local function safeClassification(unit)
     local value = UnitClassification and UnitClassification(unit)
@@ -259,7 +383,8 @@ function ns.UpdateUnit(unit)
     local dead = UnitIsDead(unit)
     if issecretvalue(dead) then dead = false end
     if not attackable or dead
-        or not ns.ShouldShow(db, safeClassification(unit), IsInInstance and IsInInstance() or false) then
+        or not ns.ShouldShow(db, safeClassification(unit), IsInInstance and IsInInstance() or false,
+            IsInGroup and IsInGroup() or false) then
         release(unit); return
     end
     local status = readStatus(unit)
@@ -304,9 +429,7 @@ function ns.UpdateUnit(unit)
     if el.parts and el.parts.uf ~= parts.uf and el.parts.blizzard then ns.SyncRoom(el.parts.uf, nil) end
     el.parts = parts
     ns.Arrange(el, parts)
-    -- Aggro warning: a tank lost the enemy (and no co-tank has it), or anybody else pulled it.
-    local warn = status ~= false and ((role == "tank" and status <= 1 and not offTank) or (role ~= "tank" and status >= 2))
-    ns.PaintElement(el, color, text, fill, isTargetPlate(plate), low, high, warn)
+    ns.PaintElement(el, color, text, fill, isTargetPlate(plate), low, high)
 
     if db.colorBar and parts.blizzard then
         tints[unit] = color
@@ -323,32 +446,52 @@ local function plateUnit(plate)
 end
 
 ----------------------------------------------------------------------------------------------------
--- Safe target: green halo on the enemy a tank/pet holds while you are not on its threat list
+-- Safe target: one green halo where the holder has a clear lead and you are not on the threat list
 ----------------------------------------------------------------------------------------------------
 
-local safeGlows, safePool = {}, {}   -- unit token -> halo frame
+-- Safe-target halos are pooled separately from the threat meter.
 ns.safeGlows = safeGlows
 
 local function setSafe(unit, plate, on)
     local g = safeGlows[unit]
     if not on then
-        if g then
-            safeGlows[unit] = nil
-            g.pulse:Stop(); g:Hide(); g:SetParent(UIParent); g:ClearAllPoints()
-            safePool[#safePool + 1] = g
+        if g and not g.removing then
+            g.removing = true
+            ns.FadeBroadGlow(g, g:GetAlpha(), 0, 0.1, function()
+                if safeGlows[unit] ~= g or not g.removing then return end
+                safeGlows[unit] = nil
+                if active[unit] and active[unit].safeGlow == g then active[unit].safeGlow = nil end
+                ns.DetachBroadGlow(g)
+                safePool[#safePool + 1] = g
+            end)
         end
         return
     end
-    if not g then g = table.remove(safePool) or ns.CreateBroadGlow(ns.GLOW_GREEN); safeGlows[unit] = g end
+    local needsFade = not g or g.removing
+    if not g then
+        g = table.remove(safePool) or ns.CreateBroadGlow(TrisThreatDB.safeGlowColor or ns.GLOW_GREEN)
+        g:SetAlpha(0)
+        safeGlows[unit] = g
+    end
+    g.removing = false
+    g.color = TrisThreatDB.safeGlowColor or ns.GLOW_GREEN
+    if active[unit] then active[unit].safeGlow = g end
     ns.PlaceBroadGlow(g, getParts(plate), active[unit])
     g:Show()
-    if not g.pulse:IsPlaying() then g.pulse:Play() end
+    if needsFade then ns.FadeBroadGlow(g, g:GetAlpha(), 1, 0.15) end
 end
 
--- Does the holder currently target this mob? (A secret answer counts as no.)
-local function targetedBy(holder, unit)
-    local same = UnitIsUnit(holder .. "target", unit)
-    return same ~= nil and not issecretvalue(same) and same == true
+local function holderOrder(holder)
+    if holder == "pet" then return math.huge end
+    local prefix, count
+    if IsInRaid and IsInRaid() then prefix, count = "raid", GetNumGroupMembers()
+    elseif IsInGroup and IsInGroup() then prefix, count = "party", GetNumSubgroupMembers()
+    else return math.huge end
+    for index = 1, count do
+        local ok, same = pcall(UnitIsUnit, holder, prefix .. index)
+        if ok and same ~= nil and not issecretvalue(same) and same then return index end
+    end
+    return math.huge
 end
 
 -- Settings "Test" button: shows the safe halo on the current target for a moment, whatever its real threat.
@@ -361,13 +504,6 @@ function ns.TestSafeGlow()
     ns.RefreshSafe()
     C_Timer.After(1.6, function() testUnit = nil; ns.RefreshSafe() end)
     return true
-end
-
--- Settings "Test" button: the target's preview element shows the aggro glow for a moment.
-function ns.TestWarn()
-    ns.warnTest = true
-    ns.ShowPreview()
-    C_Timer.After(1.6, function() ns.warnTest = nil; ns.ShowPreview() end)
 end
 
 function ns.RefreshSafe()
@@ -383,19 +519,45 @@ function ns.RefreshSafe()
                 local dead = UnitIsDead(unit)
                 if issecretvalue(dead) then dead = false end
                 if attackable and not dead
-                    and ns.ShouldShow(db, safeClassification(unit), IsInInstance and IsInInstance() or false) then
+                    and ns.ShouldShow(db, safeClassification(unit), IsInInstance and IsInInstance() or false,
+                        IsInGroup and IsInGroup() or false) then
                     local status = readStatus(unit)
                     if status ~= false and ns.IsSafeStatus(status) then
                         local holder = holderOf(unit)
-                        if holder then candidates[unit] = targetedBy(holder, unit) end
+                        local isSafe, leadScore
+                        if holder then isSafe, leadScore = safeLead(holder, unit) end
+                        if holder and isSafe then
+                            candidates[unit] = {
+                                targeted = targetedBy(holder, unit),
+                                holder = holder,
+                                mainTank = isMainTank(holder),
+                                holderOrder = holderOrder(holder),
+                                leadScore = leadScore,
+                            }
+                        end
                     end
                 end
             end
         end
     end
     local picks = ns.PickSafe(candidates)
-    if testUnit and plates[testUnit] then picks[testUnit] = true end
-    for unit, plate in pairs(plates) do setSafe(unit, plate, picks[unit]) end
+    local candidate = next(picks)
+    if testUnit and plates[testUnit] then
+        candidate, selectedSafeUnit = testUnit, testUnit
+        pendingSafeUnit, pendingSafeSince = nil, nil
+    elseif not candidate then
+        selectedSafeUnit, pendingSafeUnit, pendingSafeSince = nil, nil, nil
+    else
+        if selectedSafeUnit and not candidates[selectedSafeUnit] then selectedSafeUnit = nil end
+        if candidate == selectedSafeUnit then
+            pendingSafeUnit, pendingSafeSince = nil, nil
+        elseif candidate ~= pendingSafeUnit then
+            pendingSafeUnit, pendingSafeSince = candidate, GetTime()
+        elseif GetTime() - pendingSafeSince >= 0.3 then
+            selectedSafeUnit, pendingSafeUnit, pendingSafeSince = candidate, nil, nil
+        end
+    end
+    for unit, plate in pairs(plates) do setSafe(unit, plate, unit == selectedSafeUnit) end
     for unit in pairs(safeGlows) do
         if not plates[unit] then setSafe(unit, nil, false) end
     end
@@ -433,7 +595,7 @@ local previewParts, previewUnit
 
 local function clearPreview()
     if previewParts then
-        if preview then ns.ReleaseForeign(preview); ns.HideBroadGlow(preview, "warnGlow") end
+        if preview then ns.ReleaseForeign(preview) end
         if previewUnit and not active[previewUnit] then
             clearTint(previewUnit, previewParts)
             if previewParts.blizzard then ns.SyncRoom(previewParts.uf, nil) end
@@ -458,7 +620,7 @@ function ns.ShowPreview()
     preview.parts = parts
     ns.Arrange(preview, parts)
     local color = ns.ColorForPercent(ns.previewPercent, ns.GetRole(), ns.previewOffTank)
-    ns.PaintElement(preview, color, ns.previewPercent .. "%", ns.previewPercent, true, 0, 100, ns.PreviewWarn())
+    ns.PaintElement(preview, color, ns.previewPercent .. "%", ns.previewPercent, true, 0, 100)
     if TrisThreatDB.colorBar and parts.blizzard and unit then
         tints[unit] = color
         applyTint(parts.bar, color)
@@ -470,7 +632,7 @@ end
 
 function ns.HidePreview()
     clearPreview()
-    if preview then preview:Hide(); ns.HideBroadGlow(preview, "warnGlow") end
+    if preview then preview:Hide() end
 end
 
 ----------------------------------------------------------------------------------------------------
@@ -533,6 +695,10 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         local role = ns.GetRole()
         if role ~= lastRole then lastRole = role; dirty = true end
     else
+        if event == "GROUP_ROSTER_UPDATE" and TrisThreatDB.safeTankGUID
+            and not ns.SafeTankGUIDPresent(TrisThreatDB.safeTankGUID) then
+            TrisThreatDB.safeTankGUID = nil
+        end
         lastRole = ns.GetRole()
         dirty = true
     end
