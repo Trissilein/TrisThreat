@@ -70,6 +70,10 @@ check("safeGlow defaults on and normalizes", ns.NormalizeDB({}).safeGlow == true
 -- Glow settings and profile
 local gd = ns.NormalizeDB({ glowReach = 500, glowStrength = 1, glowFeather = "x" })
 check("glow settings are clamped and defaulted", gd.glowReach == 80 and gd.glowStrength == 10 and gd.glowFeather == 100)
+local wd = ns.NormalizeDB({ glowWidth = -500, glowOffset = 500 })
+check("glow width and offset are clamped", wd.glowWidth == -90 and wd.glowOffset == 60)
+wd = ns.NormalizeDB({ glowWidth = "x" })
+check("glow width and offset default to 0", wd.glowWidth == 0 and wd.glowOffset == 0)
 check("glow coverage: full at the bar, none past the reach", ns.GlowCoverage(1, 24, 100) == 1 and ns.GlowCoverage(25, 24, 100) == 0)
 check("glow coverage falls monotonically", ns.GlowCoverage(6, 24, 100) > ns.GlowCoverage(12, 24, 100)
     and ns.GlowCoverage(12, 24, 100) > ns.GlowCoverage(20, 24, 100))

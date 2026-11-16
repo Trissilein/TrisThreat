@@ -137,8 +137,13 @@ function ns.PlaceBroadGlow(g, parts, el)
         extraLeft, extraRight = 2, 6 -- strip background artwork extends beyond its frame
         if ns.EffectiveSide("strip", db.side) ~= "bottom" then extraTop = 5 + spec.h + 3 end
     end
-    g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -reach - GLOW_GAP - extraLeft, reach + GLOW_GAP + extraTop)
-    g:SetPoint("BOTTOMRIGHT", parts.bar, "TOPRIGHT", reach + GLOW_GAP + extraRight, GLOW_GAP + extraTop)
+    -- Width narrows or widens both ends; it can never narrow past the bar's middle. Offset lifts or sinks the glow.
+    local spread = db.glowWidth or 0
+    local barWidth = parts.bar.GetWidth and parts.bar:GetWidth()
+    if type(barWidth) == "number" then spread = math.max(spread, 1 - math.floor(barWidth / 2)) end
+    local lift = GLOW_GAP + extraTop + (db.glowOffset or 0)
+    g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -reach - GLOW_GAP - extraLeft - spread, reach + lift)
+    g:SetPoint("BOTTOMRIGHT", parts.bar, "TOPRIGHT", reach + GLOW_GAP + extraRight + spread, lift)
     local style = reach .. ":" .. (db.glowStrength or 90) .. ":" .. (db.glowFeather or 100)
         .. ":" .. table.concat(g.color, ":")
     if g.style ~= style then g.style = style; colorGlow(g); layoutGlow(g, reach) end -- settings changed

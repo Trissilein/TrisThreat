@@ -21,6 +21,8 @@ ns.defaults = {
     stripText = true,    -- strip mode shows the number at its right end
     colorBar = false,    -- also tint the nameplate health bar
     glowReach = 40,      -- glow size outwards from the bar, in px (10..80)
+    glowWidth = 0,       -- glow width: px added to (or, negative, taken from) each side of the bar (-90..40)
+    glowOffset = 0,      -- glow height above the bar's top edge, in px (-30..60)
     glowStrength = 90,   -- glow brightness at the bar, percent (10..100)
     glowFeather = 100,   -- softness: 100 = fades over the whole reach, low = bright almost to a hard edge (5..100)
     safeGlow = true,     -- green halo on each tank's target while your threat is low (non-tanks only)
@@ -70,6 +72,8 @@ function ns.NormalizeDB(db)
         clamp(safeColor[3], 0, 1, d.safeGlowColor[3]),
     }
     db.glowReach = math.floor(clamp(db.glowReach, 10, 80, d.glowReach) + 0.5)
+    db.glowWidth = math.floor(clamp(db.glowWidth, -90, 40, d.glowWidth) + 0.5)
+    db.glowOffset = math.floor(clamp(db.glowOffset, -30, 60, d.glowOffset) + 0.5)
     db.glowStrength = math.floor(clamp(db.glowStrength, 10, 100, d.glowStrength) + 0.5)
     db.glowFeather = math.floor(clamp(db.glowFeather, 5, 100, d.glowFeather) + 0.5)
     local legacyOnlyInstances = db.onlyInstances == true

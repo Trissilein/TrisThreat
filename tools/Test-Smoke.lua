@@ -229,6 +229,18 @@ do
     TrisThreatDB.glowReach = 40
     ns.PlaceBroadGlow(glow, parts)
 
+    -- Width widens or narrows both ends, Position lifts the glow; narrowing stops short of the bar's middle.
+    for _, case in ipairs({ { 20, 0 }, { -50, 0 }, { 0, 14 }, { 0, -10 }, { -90, 30 } }) do
+        TrisThreatDB.glowWidth, TrisThreatDB.glowOffset = case[1], case[2]
+        ns.PlaceBroadGlow(glow, parts)
+        local g = rectOf(glow)
+        q("width " .. case[1] .. " offset " .. case[2],
+            g.l == inner.l - 40 - case[1] and g.r == inner.r + 40 + case[1]
+            and g.t == inner.t - 40 - case[2] and g.b == inner.t - case[2])
+    end
+    TrisThreatDB.glowWidth, TrisThreatDB.glowOffset = 0, 0
+    ns.PlaceBroadGlow(glow, parts)
+
     -- The anchors follow the bar; a resized bar needs no relayout of the regions.
     local before = glow.top.pts
     BAR.r = 260

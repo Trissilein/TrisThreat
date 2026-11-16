@@ -5,7 +5,7 @@ local frame
 local controls = {}       -- refresh functions
 local floatingOnly = {}   -- controls enabled only in floating mode
 
-local WIDTH, HEIGHT = 660, 704
+local WIDTH, HEIGHT = 660, 732
 local COL1, COL2, COLW = 16, 342, 302
 
 -- Same look as the WoWraVox window: dark marble panel, gold corners, thin brown rules.
@@ -568,11 +568,6 @@ local function build()
     yl = ROW3
     heading(frame, "Safe indicator", COL1, yl); yl = yl - 24
     checkbox(frame, "Safe target glow", COL1, yl, "safeGlow", function() ns.FlashGlow("safe") end)
-    local test = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    test:SetSize(60, 22)
-    test:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + COLW - 62, yl + 1)
-    test:SetText(L["Test"])
-    test:SetScript("OnClick", function() ns.FlashGlow("safe") end)
     yl = yl - 28
 
     local safeColorButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
@@ -692,7 +687,7 @@ local function build()
     yl = yl - 30
     -- Reach controls only the outside glow; the glow ring never crosses the health-bar rectangle.
     for _, s in ipairs({ { "Reach", "glowReach", 10, 80, 2, " px" }, { "Strength", "glowStrength", 10, 100, 5, " %" },
-        { "Feather", "glowFeather", 5, 100, 5, " %" } }) do
+        { "Width", "glowWidth", -90, 40, 2, " px" }, { "Position", "glowOffset", -30, 60, 2, " px" } }) do
         compactSlider(frame, s[1], COL1, yl, s[2], s[3], s[4], s[5], s[6], function() ns.FlashGlow(ns.glowKind, true) end)
         yl = yl - 28
     end
