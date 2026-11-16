@@ -690,8 +690,8 @@ local function build()
     yr = ROW3
     heading(frame, "General", COL2, yr); yr = yr - 24
     checkbox(frame, "Enable TrisThreat", COL2, yr, "enabled"); yr = yr - 26
-    checkbox(frame, "Show solo", COL2, yr, "showSolo")
-    checkbox(frame, "Show in group", COL2 + 150, yr, "showInGroup"); yr = yr - 26
+    checkbox(frame, "Show solo", COL2, yr, "showSolo"); yr = yr - 26
+    checkbox(frame, "Show in group", COL2, yr, "showInGroup"); yr = yr - 26
     checkbox(frame, "Hide on trivial mobs", COL2, yr, "hideTrivial"); yr = yr - 26
     -- The minimap flag lives in a sub-table and is stored inverted (hide), so this box is built by hand.
     local mini = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
