@@ -490,6 +490,46 @@ function ns.TestSafeGlow()
     return true
 end
 
+local function safeInfo(unit, status, holder)
+    return {
+        status = status,
+        share = status ~= nil and rawShare(unit) or nil,
+        lead = readNumber(UnitThreatPercentageOfLead, holder, unit),
+        leadCategory = readNumber(UnitThreatLeadSituation, holder, unit),
+        targeted = targetedBy(holder, unit),
+    }
+end
+
+-- "/tt safe": what the safe-glow decision sees for every nameplate (run it in combat).
+function ns.SafeReport()
+    local function show(value)
+        if value == nil then return "-" end
+        if issecretvalue(value) then return "secret" end
+        return tostring(value)
+    end
+    local rows = 0
+    print("|cffe0ad3dTrisThreat|r safe: role " .. tostring(ns.GetRole()) .. ", glow " .. tostring(TrisThreatDB.safeGlow))
+    for _, plate in ipairs(C_NamePlate.GetNamePlates() or {}) do
+        local unit = plateUnit(plate)
+        if unit then
+            rows = rows + 1
+            local status = readStatus(unit)
+            local holder = ns.IsSafeStatus(status) and holderOf(unit)
+            local text
+            if holder then
+                local info = safeInfo(unit, status, holder)
+                text = "holder " .. holder .. ", targeted " .. show(info.targeted) .. ", lead " .. show(info.lead)
+                    .. ", leadCat " .. show(info.leadCategory) .. ", share " .. show(info.share)
+                    .. " -> " .. (ns.IsSafeTarget(info) and "SAFE" or "no")
+            else
+                text = "no holder (own status " .. (status == false and "secret" or show(status)) .. ")"
+            end
+            print("  " .. rows .. ". status " .. (status == false and "secret" or show(status)) .. ": " .. text)
+        end
+    end
+    if rows == 0 then print("  no nameplates") end
+end
+
 function ns.RefreshSafe()
     local db = TrisThreatDB
     local plates, candidates = {}, {}
@@ -508,13 +548,7 @@ function ns.RefreshSafe()
                     local status = readStatus(unit)
                     local holder = ns.IsSafeStatus(status) and holderOf(unit)
                     if holder then
-                        local safe, leadScore = ns.IsSafeTarget({
-                            status = status,
-                            share = status ~= nil and rawShare(unit) or nil,
-                            lead = readNumber(UnitThreatPercentageOfLead, holder, unit),
-                            leadCategory = readNumber(UnitThreatLeadSituation, holder, unit),
-                            targeted = targetedBy(holder, unit),
-                        })
+                        local safe, leadScore = ns.IsSafeTarget(safeInfo(unit, status, holder))
                         if safe then candidates[unit] = { holder = holder, leadScore = leadScore } end
                     end
                 end

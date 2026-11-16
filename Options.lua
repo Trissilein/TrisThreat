@@ -408,19 +408,12 @@ local function buildMock(parent, y)
 end
 
 -- Shows the safe-target halo in the preview and briefly on the real target.
-local flashToken = 0
+-- The preview shows the glow for as long as "Safe target glow" is on (RefreshMock); toggling it also flashes the real target.
 ns.glowKind = "safe"
 function ns.FlashGlow(_, mockOnly)
     if not mock then return end
-    flashToken = flashToken + 1
-    local token = flashToken
-    ns.ShowBroadGlow(mock, "safeGlow", ns.GetSafeGlowColor(), mock.parts, mock.element)
-    if ns.TestSafeGlow and not mockOnly then ns.TestSafeGlow() end
-    C_Timer.After(1.6, function()
-        if token ~= flashToken then return end
-        ns.HideBroadGlow(mock, "safeGlow")
-        ns.RefreshMock() -- hides the aggro glow again unless the preview slider really warns
-    end)
+    ns.RefreshMock()
+    if ns.TestSafeGlow and not mockOnly and TrisThreatDB.safeGlow then ns.TestSafeGlow() end
 end
 
 function ns.RefreshMock()
@@ -433,6 +426,11 @@ function ns.RefreshMock()
     ns.Arrange(mock.element, mock.parts)
     ns.PaintElement(mock.element, color, ns.previewPercent .. "%", ns.previewPercent, true, 0, 100)
     if mock.percentText then mock.percentText:SetText(ns.previewPercent .. "%") end
+    if db.safeGlow then
+        ns.ShowBroadGlow(mock, "safeGlow", ns.GetSafeGlowColor(), mock.parts, mock.element)
+    else
+        ns.HideBroadGlow(mock, "safeGlow")
+    end
 end
 
 local ROLE_TEXT = { tank = "Tank", damage = "Damage dealer", healer = "Healer" }
@@ -813,6 +811,7 @@ end
 
 SlashCmdList["TRISTHREAT"] = function(message)
     if (message or ""):lower():match("^%s*dump") then dumpNameplate(); return end
+    if (message or ""):lower():match("^%s*safe") then ns.SafeReport(); return end
     if (message or ""):lower():match("^%s*probe") then
         local ok = ns.ProbeCurve(70)
         print("|cffe0ad3dTrisThreat|r probe: color curve " .. (ok and "works for plain numbers" or "NOT available"))
