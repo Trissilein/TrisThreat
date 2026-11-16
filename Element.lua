@@ -60,8 +60,8 @@ function ns.CreateElement()
     return el
 end
 
--- Safe-target glow: a feathered ring (four straight edges, four radial corners) outside the health-bar rectangle,
--- so its fill and dark track stay readable.
+-- Safe-target glow: a feathered light above the health bar's top edge (one straight edge, two radial end caps),
+-- radiating upward, so the bar's fill and dark track stay readable.
 ns.GLOW_GREEN = { 0.18, 0.85, 0.30 }
 function ns.GetSafeGlowColor()
     return TrisThreatDB and TrisThreatDB.safeGlowColor or ns.GLOW_GREEN
@@ -73,7 +73,7 @@ local GLOW_GAP = 2 -- starts just outside the bar's own border
 local ATLAS = { w = 512, h = 512, tile = 64, gutter = 8, cell = 80, cols = 6 }
 ns.GLOW_ATLAS = ATLAS
 
--- Applies the strength/feather settings to the eight non-overlapping glow regions.
+-- Applies the strength/feather settings to the three non-overlapping glow regions.
 local function colorGlow(g)
     local alpha = (TrisThreatDB.glowStrength or 90) / 100
     local tile = math.max(0, math.min(19, math.floor((TrisThreatDB.glowFeather or 100) / 5 + 0.5) - 1))
@@ -86,13 +86,8 @@ local function colorGlow(g)
     end
     -- Edge samples use one axis of the same radial profile as the corners, without stretching the corners.
     coords(g.top, 0, 1, 0, 0)
-    coords(g.bottom, 0, 0, 0, 1)
-    coords(g.left, 1, 0, 0, 0)
-    coords(g.right, 0, 0, 1, 0)
     coords(g.topLeft, 1, 1, 0, 0)
     coords(g.topRight, 0, 1, 1, 0)
-    coords(g.bottomLeft, 1, 0, 0, 1)
-    coords(g.bottomRight, 0, 0, 1, 1)
     for _, region in ipairs(g.regions) do
         region:SetVertexColor(g.color[1], g.color[2], g.color[3], alpha)
     end
@@ -102,7 +97,7 @@ function ns.CreateBroadGlow(color)
     local f = CreateFrame("Frame", nil, UIParent)
     f.regions, f.color = {}, color or ns.GetSafeGlowColor()
     f:SetAlpha(0)
-    for _, key in ipairs({ "top", "bottom", "left", "right", "topLeft", "topRight", "bottomLeft", "bottomRight" }) do
+    for _, key in ipairs({ "top", "topLeft", "topRight" }) do
         local t = f:CreateTexture(nil, "BACKGROUND")
         t:SetTexture(GLOW_TEXTURE)
         t:SetBlendMode("BLEND")
@@ -111,7 +106,7 @@ function ns.CreateBroadGlow(color)
     return f
 end
 
--- Straight edges and radial corner squares stay outside the outlined rectangle; the center has no texture.
+-- g is `reach` tall and sits on the bar's top edge: radial end caps at both ends, the straight edge between them.
 -- Anchored to g's corners, so they follow g's size without relayout; only a changed reach needs this.
 local function layoutGlow(g, reach)
     local function put(region, p1, rel1, x1, y1, p2, rel2, x2, y2)
@@ -121,16 +116,10 @@ local function layoutGlow(g, reach)
     end
     put(g.topLeft, "TOPLEFT", "TOPLEFT", 0, 0)
     put(g.topRight, "TOPRIGHT", "TOPRIGHT", 0, 0)
-    put(g.bottomLeft, "BOTTOMLEFT", "BOTTOMLEFT", 0, 0)
-    put(g.bottomRight, "BOTTOMRIGHT", "BOTTOMRIGHT", 0, 0)
     put(g.top, "TOPLEFT", "TOPLEFT", reach, 0, "BOTTOMRIGHT", "TOPRIGHT", -reach, -reach)
-    put(g.bottom, "TOPLEFT", "BOTTOMLEFT", reach, reach, "BOTTOMRIGHT", "BOTTOMRIGHT", -reach, 0)
-    put(g.left, "TOPLEFT", "TOPLEFT", 0, -reach, "BOTTOMRIGHT", "BOTTOMLEFT", reach, reach)
-    put(g.right, "TOPLEFT", "TOPRIGHT", -reach, -reach, "BOTTOMRIGHT", "BOTTOMRIGHT", 0, reach)
 end
 
--- el (optional): the threat element. In strip mode it is part of the outline, so the glow wraps bar AND strip
--- (above or below the bar); badge and segment sit beside or inside the bar and need nothing extra.
+-- el (optional): the threat element. A strip above the bar lifts the glow over the strip; a strip below needs nothing.
 function ns.PlaceBroadGlow(g, parts, el)
     local parent = parts.uf
     g:SetParent(parent)
@@ -142,15 +131,14 @@ function ns.PlaceBroadGlow(g, parts, el)
     g:ClearAllPoints()
     local reach = TrisThreatDB.glowReach or 40
     local db = TrisThreatDB
-    local extraLeft, extraRight, extraTop, extraBottom = 0, 0, 0, 0
+    local extraLeft, extraRight, extraTop = 0, 0, 0
     if el and el.look == "strip" then
         local spec = ns.Layout("strip", db.side, ns.Measure(parts), db)
         extraLeft, extraRight = 2, 6 -- strip background artwork extends beyond its frame
-        if ns.EffectiveSide("strip", db.side) == "bottom" then extraBottom = 7 + spec.h + 6
-        else extraTop = 5 + spec.h + 3 end
+        if ns.EffectiveSide("strip", db.side) ~= "bottom" then extraTop = 5 + spec.h + 3 end
     end
     g:SetPoint("TOPLEFT", parts.bar, "TOPLEFT", -reach - GLOW_GAP - extraLeft, reach + GLOW_GAP + extraTop)
-    g:SetPoint("BOTTOMRIGHT", parts.bar, "BOTTOMRIGHT", reach + GLOW_GAP + extraRight, -reach - GLOW_GAP - extraBottom)
+    g:SetPoint("BOTTOMRIGHT", parts.bar, "TOPRIGHT", reach + GLOW_GAP + extraRight, GLOW_GAP + extraTop)
     local style = reach .. ":" .. (db.glowStrength or 90) .. ":" .. (db.glowFeather or 100)
         .. ":" .. table.concat(g.color, ":")
     if g.style ~= style then g.style = style; colorGlow(g); layoutGlow(g, reach) end -- settings changed

@@ -6,6 +6,7 @@
 - Added safe-glow color selection and fades between recommendations. The glow is a feathered ring with rounded corners outside the health-bar rectangle, so current HP remains visible.
 - Safe-glow rework: round radial corners, one soft profile per Feather step, and a gutter around each texture tile so mipmaps cannot bleed dark spots. The glow wraps bar and strip; the strip number gets a shadow for contrast.
 - Safe glow is stricter: an enemy glows only while the tank (or pet) holding it leads clearly, is targeting exactly that enemy, and your own threat on it is low (under 60 % of the holder's where the game exposes it). Each tank's target can glow, so two tanks give two glows. Unreadable threat counts as not safe.
+- Safe glow now lights only the top edge of the nameplate bar and radiates upward (straight edge plus rounded end caps); the sides and bottom no longer glow.
 - Added separate Solo and Group visibility controls. The health-bar color option applies to the filled portion only.
 
 ## 0.1.0

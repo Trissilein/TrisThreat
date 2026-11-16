@@ -164,12 +164,12 @@ do
     rects[bar] = BAR
     local parts = { uf = uf, bar = bar }
 
-    -- Checks the eight regions of `glow` against the rectangle `inner` they must surround.
+    -- Checks the three regions of `glow` against the rectangle `inner`, whose top edge they must sit on.
     local function checkRing(label, reach, inner)
         local g = rectOf(glow)
         rects[glow] = g
-        q(label .. ": glow frame is the inner rectangle plus reach on every side",
-            g.l == inner.l - reach and g.r == inner.r + reach and g.t == inner.t - reach and g.b == inner.b + reach)
+        q(label .. ": glow frame is reach tall, on the inner top edge, reach wider on both sides",
+            g.l == inner.l - reach and g.r == inner.r + reach and g.t == inner.t - reach and g.b == inner.t)
         local sum = 0
         for _, region in ipairs(glow.regions) do region.rect = rectOf(region) end
         for i, region in ipairs(glow.regions) do
@@ -182,8 +182,8 @@ do
                 q(label .. ": regions " .. i .. " and " .. j .. " do not overlap", not overlap(a, glow.regions[j].rect))
             end
         end
-        q(label .. ": the eight regions cover the ring without a gap", sum == area(g) - area(inner))
-        for _, key in ipairs({ "topLeft", "topRight", "bottomLeft", "bottomRight" }) do
+        q(label .. ": the three regions cover the glow frame without a gap", #glow.regions == 3 and sum == area(g))
+        for _, key in ipairs({ "topLeft", "topRight" }) do
             local a = glow[key].rect
             q(label .. ": " .. key .. " is a reach-sized square", a.r - a.l == reach and a.b - a.t == reach)
         end
@@ -246,8 +246,8 @@ do
     ns.PlaceBroadGlow(glow, parts)
     check("Feather selects a different radial profile", glow.topLeft.uv[1] ~= u)
     check("Strength controls opacity independently", glow.topLeft.tint[4] == 0.35)
-    check("corner profile meets both straight edges", glow.topLeft.uv[2] == glow.top.uv[1]
-        and glow.topLeft.uv[4] == glow.left.uv[3])
+    check("end cap profile meets the straight edge", glow.topLeft.uv[2] == glow.top.uv[1]
+        and glow.topRight.uv[1] == glow.top.uv[2])
     checkRing("feather 5", 40, inner)
     for feather = 5, 100, 5 do
         TrisThreatDB.glowFeather = feather
