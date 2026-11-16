@@ -129,51 +129,19 @@ local function compactSlider(parent, text, x, y, key, low, high, step, suffix, a
         if loading then return end
         value = math.floor(value / step + 0.5) * step
         TrisThreatDB[key] = value
-        valueText:SetText(value .. suffix)
+        valueText:SetText(("%g"):format(value) .. suffix)
         ns.ApplyLayout()
         if after then after() end
     end)
     controls[#controls + 1] = function()
         loading = true
         s:SetValue(TrisThreatDB[key])
-        valueText:SetText(TrisThreatDB[key] .. suffix)
+        valueText:SetText(("%g"):format(TrisThreatDB[key]) .. suffix)
         loading = false
     end
+    s.title = fs -- dimmed together with the slider when it is disabled
     addTooltip(s, text)
     addTooltip(fs, text)
-    return s
-end
-
-local function slider(parent, text, x, y, key, low, high, step)
-    local fs = label(parent, text)
-    fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 2, y)
-    local valueText = label(parent, "", "GameFontNormalSmall")
-    valueText:SetPoint("TOPRIGHT", parent, "TOPLEFT", x + COLW - 2, y)
-    local s = CreateFrame("Slider", nil, parent, "OptionsSliderTemplate")
-    s:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 4, y - 20)
-    s:SetSize(COLW - 8, 16)
-    s:SetMinMaxValues(low, high)
-    s:SetValueStep(step)
-    s:SetObeyStepOnDrag(true)
-    if s.Low then s.Low:SetText(tostring(low)) end
-    if s.High then s.High:SetText(tostring(high)) end
-    local loading = false
-    s:SetScript("OnValueChanged", function(_, value)
-        if loading then return end
-        value = math.floor(value / step + 0.5) * step
-        TrisThreatDB[key] = value
-        valueText:SetText(tostring(value))
-        ns.ApplyLayout()
-        if ns.RefreshMock then ns.RefreshMock() end
-    end)
-    controls[#controls + 1] = function()
-        loading = true
-        s:SetValue(TrisThreatDB[key])
-        valueText:SetText(tostring(TrisThreatDB[key]))
-        loading = false
-    end
-    s.title = fs
-    addTooltip(s, text)
     return s
 end
 
@@ -706,7 +674,8 @@ local function build()
 
     yr = ROW2
     heading(frame, "Free position", COL2, yr); yr = yr - 26
-    floatingOnly[#floatingOnly + 1] = slider(frame, "Size", COL2, yr, "scale", 0.5, 2, 0.1); yr = yr - 44
+    local size = compactSlider(frame, "Size", COL2, yr, "scale", 0.5, 2, 0.1, "", ns.RefreshMock)
+    floatingOnly[#floatingOnly + 1] = size; yr = yr - 34
     local reset = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     reset:SetSize(140, 22)
     reset:SetPoint("TOPLEFT", frame, "TOPLEFT", COL2, yr)
