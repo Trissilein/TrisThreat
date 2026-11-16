@@ -441,7 +441,7 @@ function ns.ReleaseForeign(el)
     el.movedForeign = nil
 end
 
--- side: "left" | "right" | "top" | "bottom" (the direction to push).
+-- side: "left" | "right" | "top" | "topRight" | "bottom" (the direction to push).
 function ns.PushForeign(el, parts, side)
     ns.ReleaseForeign(el)
     local L, R, T, B = screenRect(el)
@@ -462,7 +462,7 @@ function ns.PushForeign(el, parts, side)
         local dx, dy = 0, 0
         if side == "left" then dx = (L - gap) - r
         elseif side == "right" then dx = (R + gap) - l
-        elseif side == "top" then dy = (T + gap) - b
+        elseif side == "top" or side == "topRight" then dy = (T + gap) - b
         else dy = (B - gap) - t end
         local scale = frame:GetEffectiveScale()
         dx, dy = dx / scale, dy / scale

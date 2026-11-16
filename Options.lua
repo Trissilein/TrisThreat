@@ -513,7 +513,7 @@ local function build()
     -- Left column: display, colors, glows
     local yl = ROW1
     heading(frame, "Display", COL1, yl); yl = yl - 28
-    local drag = label(frame, "Drag the element in the preview. Dots mark where it snaps: to a badge position, or into the strip above or below the bar. Anywhere else places it freely.", "GameFontNormalSmall")
+    local drag = label(frame, "Drag the element in the preview. Dots mark where it snaps: badge beside or above the bar, strip at the top or bottom center, segment in the bar ends. Anywhere else places it freely.", "GameFontNormalSmall")
     drag:SetPoint("TOPLEFT", frame, "TOPLEFT", COL1 + 2, yl + 4)
     drag:SetWidth(COLW)
     drag:SetJustifyH("LEFT"); yl = yl - 48

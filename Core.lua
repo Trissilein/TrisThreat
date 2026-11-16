@@ -14,7 +14,7 @@ ns.defaults = {
     offsetY = 0,
     scale = 1,
     mode = "badge",      -- floating | badge | segment | strip; set by dropping the element in the settings preview
-    side = "right",      -- left | right | top | bottom (segment: left/right, strip: top/bottom)
+    side = "right",      -- left | right | top (top left) | topRight | bottom (segment: left/right, strip: top/bottom)
     makeRoom = true,     -- move Blizzard elements aside for the integrated modes
     colorText = true,    -- threat color on the number
     colorBackground = false, -- threat color on the badge/segment background (the strip fill is always colored)
@@ -36,7 +36,7 @@ ns.defaults = {
 
 local ROLE_CHOICES = { auto = true, tank = true, damage = true, healer = true }
 local DISPLAY_MODES = { floating = true, badge = true, segment = true, strip = true }
-local SIDES = { left = true, right = true, top = true, bottom = true }
+local SIDES = { left = true, right = true, top = true, topRight = true, bottom = true }
 
 local function clamp(value, low, high, fallback)
     value = tonumber(value)
@@ -422,6 +422,9 @@ function ns.Layout(mode, side, m, db)
         elseif side == "top" then
             spec.points = { { "BOTTOMLEFT", "bar", "TOPLEFT", 0, 4 } }
             room.nameY = badgeH + 2
+        elseif side == "topRight" then
+            spec.points = { { "BOTTOMRIGHT", "bar", "TOPRIGHT", 0, 4 } }
+            room.nameY = badgeH + 2
         else
             spec.points = { { "TOPLEFT", "bar", "BOTTOMLEFT", 0, -7 } }
             -- The cast bar sits right under the health bar: lift the health bar so the badge fits between.
@@ -470,11 +473,9 @@ end
 ns.MOCK_W, ns.MOCK_H = 628, 150
 ns.MOCK_ZONES = {
     { mode = "badge", side = "right", text = "Badge right" }, { mode = "badge", side = "left", text = "Badge left" },
-    { mode = "badge", side = "top", text = "Badge above" }, { mode = "badge", side = "bottom", text = "Badge below" },
-    { mode = "strip", side = "top", text = "Strip above", anchor = 1 },
-    { mode = "strip", side = "top", text = "Strip above", anchor = 2 },
-    { mode = "strip", side = "bottom", text = "Strip below", anchor = 1 },
-    { mode = "strip", side = "bottom", text = "Strip below", anchor = 2 },
+    -- Badge above the bar's top-left / top-right corner; the strip spans the bar, so its spots are top and bottom center.
+    { mode = "badge", side = "top", text = "Badge top left" }, { mode = "badge", side = "topRight", text = "Badge top right" },
+    { mode = "strip", side = "top", text = "Strip above" }, { mode = "strip", side = "bottom", text = "Strip below" },
     -- Inside the bar's ends: a segment that pushes the health text aside.
     { mode = "segment", side = "left", text = "Bar left end" }, { mode = "segment", side = "right", text = "Bar right end" },
 } -- dropping on a strip or bar-end spot switches the look; there is no mode switch
@@ -513,18 +514,8 @@ function ns.MockZoneRect(zone)
     return l, b, l + w, b + spec.h
 end
 
--- Strip placement has two real end anchors; expose both as separate drop spots in the preview.
-function ns.MockZoneSnapRect(zone)
-    if not zone.anchor then return ns.MockZoneRect(zone) end
-    local bar, level = mockRects()
-    local rects = { bar = bar, level = level }
-    local spec = ns.Layout(zone.mode, zone.side, MOCK_MEASURE, nil)
-    local p = spec.points[zone.anchor]
-    if not p then return ns.MockZoneRect(zone) end
-    local x, y = rectPoint(rects[p[2]], p[3])
-    x, y = x + p[4], y + p[5]
-    return x - 8, y - 8, x + 8, y + 8
-end
+-- The drop dot sits at the center of the spot's rect.
+ns.MockZoneSnapRect = ns.MockZoneRect
 
 -- Each snap spot is a dot at the center of its rect. Index of the dot closest to (x, y) within 22 px, or nil.
 function ns.PickMockZone(x, y, rects)

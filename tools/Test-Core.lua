@@ -160,6 +160,11 @@ check("strip bottom lifts the health bar", ns.Layout("strip", "bottom", m, db2).
 local fl = ns.Layout("floating", "right", m, ns.NormalizeDB({ offsetX = 20, offsetY = -10, scale = 2 }))
 check("floating uses offsets and scale", fl.scale == 2 and fl.points[1][4] == 10 and fl.points[1][5] == -3.5)
 
+local tr = ns.Layout("badge", "topRight", m, db2)
+check("badge top right sits on the bar's top-right corner and pushes the name", tr.points[1][1] == "BOTTOMRIGHT"
+    and tr.points[1][3] == "TOPRIGHT" and tr.room.nameY == ns.Layout("badge", "top", m, db2).room.nameY)
+check("topRight is a valid side", ns.NormalizeDB({ side = "topRight" }).side == "topRight")
+
 -- Settings preview: snap spots and free placement
 local zoneRects, inside = {}, true
 for i, z in ipairs(ns.MOCK_ZONES) do
@@ -167,7 +172,7 @@ for i, z in ipairs(ns.MOCK_ZONES) do
     zoneRects[i] = { l, b, r, t }
     inside = inside and l >= 0 and b >= 0 and r <= ns.MOCK_W and t <= ns.MOCK_H and r > l and t > b
 end
-check("every snap spot lies inside the preview", inside and #zoneRects == 10)
+check("every snap spot lies inside the preview", inside and #zoneRects == 8)
 local function spot(mode, side) for i, z in ipairs(ns.MOCK_ZONES) do if z.mode == mode and z.side == side then return i end end end
 local function centerOf(i) local r = zoneRects[i]; return (r[1] + r[3]) / 2, (r[2] + r[4]) / 2 end
 local ok = true

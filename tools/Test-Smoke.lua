@@ -339,8 +339,8 @@ local function dragToZone(mode, side)
     end
     error("missing snap zone " .. mode .. "/" .. side)
 end
-dragToZone("badge", "bottom")
-check("dropping on the badge-below spot snaps there", TrisThreatDB.mode == "badge" and TrisThreatDB.side == "bottom")
+dragToZone("badge", "topRight")
+check("dropping on the badge top-right spot snaps there", TrisThreatDB.mode == "badge" and TrisThreatDB.side == "topRight")
 dragToZone("strip", "top")
 check("dropping on the strip spot turns it into the strip", TrisThreatDB.mode == "strip" and TrisThreatDB.side == "top")
 dragToZone("badge", "left")
