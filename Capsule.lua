@@ -522,7 +522,10 @@ function ns.SafeReport()
             local text
             if holder then
                 local info = safeInfo(unit, status, holder)
-                text = "holder " .. holder .. ", targeted " .. show(info.targeted) .. ", lead " .. show(info.lead)
+                local exists = UnitExists(holder .. "target")
+                local raw = UnitIsUnit(holder .. "target", unit)
+                text = "holder " .. holder .. ", holder target exists " .. show(exists) .. ", same raw " .. show(raw)
+                    .. " (" .. type(raw) .. "), targeted " .. show(info.targeted) .. ", lead " .. show(info.lead)
                     .. ", leadCat " .. show(info.leadCategory) .. ", share " .. show(info.share)
                     .. " -> " .. (ns.IsSafeTarget(info) and "SAFE" or "no")
             else
