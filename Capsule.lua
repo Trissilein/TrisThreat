@@ -507,8 +507,12 @@ function ns.SafeReport()
         if issecretvalue(value) then return "secret" end
         return tostring(value)
     end
-    local rows = 0
-    print("|cffe0ad3dTrisThreat|r safe: role " .. tostring(ns.GetRole()) .. ", glow " .. tostring(TrisThreatDB.safeGlow))
+    local rows, lines = 0, {}
+    local function out(text) lines[#lines + 1] = text; print(text) end
+    out("|cffe0ad3dTrisThreat|r safe: role " .. tostring(ns.GetRole()) .. ", glow " .. tostring(TrisThreatDB.safeGlow)
+        .. ", group " .. tostring(IsInGroup and IsInGroup()) .. ", instance " .. tostring(IsInInstance and IsInInstance())
+        .. ", combat " .. tostring(InCombatLockdown and InCombatLockdown()))
+    TrisThreatDB.safeReport = lines -- saved on /reload, so it can be read without a chat screenshot
     for _, plate in ipairs(C_NamePlate.GetNamePlates() or {}) do
         local unit = plateUnit(plate)
         if unit then
@@ -524,10 +528,10 @@ function ns.SafeReport()
             else
                 text = "no holder (own status " .. (status == false and "secret" or show(status)) .. ")"
             end
-            print("  " .. rows .. ". status " .. (status == false and "secret" or show(status)) .. ": " .. text)
+            out("  " .. rows .. ". status " .. (status == false and "secret" or show(status)) .. ": " .. text)
         end
     end
-    if rows == 0 then print("  no nameplates") end
+    if rows == 0 then out("  no nameplates") end
 end
 
 function ns.RefreshSafe()
