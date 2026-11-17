@@ -227,9 +227,16 @@ local function isMainTank(holder)
 end
 
 -- Only a holder's current target is a useful recommendation; prefer the assigned main tank when several hold it.
-local function targetedBy(holder, unit)
+-- In combat UnitIsUnit(holder.."target", plateUnit) can come back nil; then ask the nameplate system whose plate
+-- the holder's target wears (no plate = not the same enemy).
+local function targetedBy(holder, unit, plate)
     local same = UnitIsUnit(holder .. "target", unit)
-    return same ~= nil and not issecretvalue(same) and same == true
+    if same ~= nil and not issecretvalue(same) then return same == true end
+    if plate and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
+        local ok, other = pcall(C_NamePlate.GetNamePlateForUnit, holder .. "target")
+        if ok and other ~= nil and not issecretvalue(other) then return other == plate end
+    end
+    return false
 end
 
 -- Is anybody besides the player (group members, their pets, your pet) on the mob's threat list?
@@ -490,13 +497,13 @@ function ns.TestSafeGlow()
     return true
 end
 
-local function safeInfo(unit, status, holder)
+local function safeInfo(unit, status, holder, plate)
     return {
         status = status,
         share = status ~= nil and rawShare(unit) or nil,
         lead = readNumber(UnitThreatPercentageOfLead, holder, unit),
         leadCategory = readNumber(UnitThreatLeadSituation, holder, unit),
-        targeted = targetedBy(holder, unit),
+        targeted = targetedBy(holder, unit, plate),
     }
 end
 
@@ -521,7 +528,7 @@ function ns.SafeReport()
             local holder = ns.IsSafeStatus(status) and holderOf(unit)
             local text
             if holder then
-                local info = safeInfo(unit, status, holder)
+                local info = safeInfo(unit, status, holder, plate)
                 local exists = UnitExists(holder .. "target")
                 local raw = UnitIsUnit(holder .. "target", unit)
                 text = "holder " .. holder .. ", holder target exists " .. show(exists) .. ", same raw " .. show(raw)
@@ -555,7 +562,7 @@ function ns.RefreshSafe()
                     local status = readStatus(unit)
                     local holder = ns.IsSafeStatus(status) and holderOf(unit)
                     if holder then
-                        local safe, leadScore = ns.IsSafeTarget(safeInfo(unit, status, holder))
+                        local safe, leadScore = ns.IsSafeTarget(safeInfo(unit, status, holder, plate))
                         if safe then candidates[unit] = { holder = holder, leadScore = leadScore } end
                     end
                 end

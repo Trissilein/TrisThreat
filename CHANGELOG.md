@@ -8,6 +8,7 @@
 - Safe glow is stricter: an enemy glows only while the tank (or pet) holding it leads clearly, is targeting exactly that enemy, and your own threat on it is low (under 60 % of the holder's where the game exposes it). Each tank's target can glow, so two tanks give two glows. Unreadable threat counts as not safe.
 - Safe glow now lights only the top edge of the nameplate bar and radiates upward (straight edge plus rounded end caps); the sides and bottom no longer glow.
 - Safe glow settings: new Width (widen or narrow both ends) and Position (lift or sink) sliders. Removed the Feather slider and the Test button (toggling the option or moving a slider already shows the glow).
+- Safe glow fix: in combat the game returns nothing when comparing the tank's target with a nameplate unit, so no enemy ever qualified; the nameplate lookup of the tank's target now decides then.
 - The settings preview now shows the safe glow for as long as the option is on. New `/tt safe` lists what the glow decision sees per nameplate (use it in combat).
 - Snap spots in the settings preview: strip at top and bottom center, badge above the top-left or top-right corner (new), plus the badge beside the bar and the segment ends. The "badge below" spot is gone; a stored badge-below setting still works.
 - Added separate Solo and Group visibility controls. The health-bar color option applies to the filled portion only.

@@ -395,9 +395,17 @@ do
     _G.UnitGroupRolesAssigned = function() return "TANK" end
     _G.UnitExists = function() return true end
     local tankTarget = { party1 = "nameplate1" }
+    local isUnitNil, platesByUnit = false, { nameplate1 = plate }
+    local realGetPlate = C_NamePlate.GetNamePlateForUnit
+    C_NamePlate.GetNamePlateForUnit = function(token)
+        local holder = token:match("^(.+)target$")
+        if holder then return platesByUnit[tankTarget[holder]] end
+        return realGetPlate(token)
+    end
     _G.UnitIsUnit = function(a, b)
         local holder = a:match("^(.-)target$")
         if holder then
+            if isUnitNil then return nil end
             local t = tankTarget[holder]
             if t == SECRET then return SECRET end
             return t == b
@@ -425,6 +433,14 @@ do
     tankTarget.party1 = SECRET
     settle()
     check("tank target unreadable: no glow", ns.safeGlows.nameplate1 == nil)
+    isUnitNil = true -- in combat UnitIsUnit(holder.."target", plateUnit) came back nil: the nameplate lookup decides
+    tankTarget.party1 = "nameplate1"
+    settle()
+    check("UnitIsUnit nil, holder's target wears this plate: glow", ns.safeGlows.nameplate1 ~= nil)
+    tankTarget.party1 = "nameplate9"
+    settle()
+    check("UnitIsUnit nil, holder's target wears another plate: no glow", ns.safeGlows.nameplate1 == nil)
+    isUnitNil = false
     tankTarget.party1 = "nameplate1"
     lead, leadSit, share = SECRET, 0, 85
     settle()
@@ -442,6 +458,7 @@ do
     -- Two tanks, each on its own enemy: both glow.
     local plate2 = Stub()
     plate2.UnitFrame, plate2.namePlateUnitToken = uf, "nameplate2"
+    platesByUnit.nameplate2 = plate2
     C_NamePlate.GetNamePlates = function() return { plate, plate2 } end
     _G.GetNumSubgroupMembers = function() return 2 end
     _G.UnitThreatSituation = function(unit, mob)
@@ -481,6 +498,7 @@ do
     TrisThreatDB.safeGlow = true
     _G.IsInGroup, _G.GetNumSubgroupMembers, _G.UnitGroupRolesAssigned = real.IsInGroup, real.GetNum, real.Roles
     _G.UnitIsUnit, _G.UnitExists, _G.UnitThreatSituation = real.IsUnit, real.Exists, real.Threat
+    C_NamePlate.GetNamePlateForUnit = realGetPlate
     _G.UnitThreatPercentageOfLead = real.Lead
     _G.UnitDetailedThreatSituation, _G.UnitThreatLeadSituation = real.Detailed, real.LeadSit
     TrisThreatDB.role = "auto"
