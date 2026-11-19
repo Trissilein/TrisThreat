@@ -1,17 +1,11 @@
 # TrisThreat
 
-## Unreleased
+## 0.2.0
 
-- Removed the red aggro-warning glow. The safe-target indicator recommends one attackable enemy with a confirmed threat lead, prioritizes the selected tank's target, and supports automatic or per-group tank selection.
-- Added safe-glow color selection and fades between recommendations. The glow is a feathered ring with rounded corners outside the health-bar rectangle, so current HP remains visible.
-- Safe-glow rework: round radial corners, one soft profile per Feather step, and a gutter around each texture tile so mipmaps cannot bleed dark spots. The glow wraps bar and strip; the strip number gets a shadow for contrast.
-- Safe glow is stricter: an enemy glows only while the tank (or pet) holding it leads clearly, is targeting exactly that enemy, and your own threat on it is low (under 60 % of the holder's where the game exposes it). Each tank's target can glow, so two tanks give two glows. Unreadable threat counts as not safe.
-- Safe glow now lights only the top edge of the nameplate bar and radiates upward (straight edge plus rounded end caps); the sides and bottom no longer glow.
-- Safe glow settings: new Width (widen or narrow both ends) and Position (lift or sink) sliders. Removed the Feather slider and the Test button (toggling the option or moving a slider already shows the glow).
-- Safe glow fix: in combat the game returns nothing when comparing the tank's target with a nameplate unit, so no enemy ever qualified; the nameplate lookup of the tank's target now decides then.
-- The settings preview now shows the safe glow for as long as the option is on. New `/tt safe` lists what the glow decision sees per nameplate (use it in combat).
-- Snap spots in the settings preview: strip at top and bottom center, badge above the top-left or top-right corner (new), plus the badge beside the bar and the segment ends. The "badge below" spot is gone; a stored badge-below setting still works.
-- Added separate Solo and Group visibility controls. The health-bar color option applies to the filled portion only.
+- Replaced the red aggro-warning glow with a configurable safe-target glow along the top of the health bar. Each qualifying tank's target can glow when the tank has a clear threat lead and your threat is low. Choose automatic or manual tank selection.
+- Customize glow color, width and vertical position. The settings preview shows changes live, and /tt safe reports the decision for each nameplate.
+- Added separate Solo and Group visibility controls. Health-bar tint applies to the filled portion.
+- Added badge snap spots above both corners of the bar. Existing badge-below positions still work.
 
 ## 0.1.0
 

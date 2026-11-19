@@ -4,7 +4,7 @@ TrisThreat is a small World of Warcraft addon for **WoW Forever** that shows how
 
 ## Version
 
-Current stable version: **0.1.0**.
+Current stable version: **0.2.0**.
 
 WoW Forever compatibility (beta): interface **16001** (`TrisThreat_Camelot.toc`). Forever only: there is no Retail TOC, so Retail does not list the addon.
 
